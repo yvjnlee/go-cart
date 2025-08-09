@@ -1,8 +1,7 @@
 import { useState } from 'react'
-import { Feed } from './components/Feed'
-import { ShoppingRequestPage } from './components/ShoppingRequestPage'
-import { OverlayNav } from './components/OverlayNav'
-import {Requester} from './components/Requester'
+import RequestFeed from './components/RequestFeed'
+import { NavBar } from './components/NavBar'
+import PostComposer from './components/PostComposer'
 
 type AppView = 'feed' | 'shoppingRequests'
 
@@ -11,13 +10,13 @@ export function App() {
 
   return (
     <div className="h-screen w-screen overflow-hidden relative bg-black">
-      <OverlayNav current={currentView} onNavigate={setCurrentView} />
+      <NavBar current={currentView} onNavigate={setCurrentView} />
       <div className="absolute inset-0">
         <div className={currentView === 'feed' ? 'h-full' : 'hidden'}>
-          <Feed />
+          <RequestFeed />
         </div>
         <div className={currentView === 'shoppingRequests' ? 'h-full' : 'hidden'}>
-          <Requester />
+          <PostComposer />
         </div>
       </div>
     </div>

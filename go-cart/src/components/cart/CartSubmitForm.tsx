@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { CartItem } from '../../types'
-import { cartsService } from '../../services/cartsService'
+import { cartsService } from '../../services/cart.service'
 
 interface Props {
   requestId: string

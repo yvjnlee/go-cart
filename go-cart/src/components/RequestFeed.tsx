@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { requestsService } from '../services/requestsService'
+import { requestsService } from '../services/request.service'
 import type { CartItem, CartItemProductSnapshot, ShoppingRequest } from '../types'
 import { CartItemEditor } from './cart/CartItemEditor'
 import { CartItemList } from './cart/CartItemList'
 import { CartSubmitForm } from './cart/CartSubmitForm'
-import { curationService, type CuratedSection } from '../services/curationService'
+import { curationService, type CuratedSection } from '../services/curation.service'
 
-export function Feed() {
+export function RequestFeed() {
   const [requests, setRequests] = useState<ShoppingRequest[] | null>(null)
   const [selectedRequest, setSelectedRequest] = useState<ShoppingRequest | null>(null)
   const [items, setItems] = useState<CartItem[]>([])
@@ -86,6 +86,8 @@ export function Feed() {
   )
 }
 
+export default RequestFeed
+
 function ReelCard({ request, isActive, onShop }: { request: ShoppingRequest; isActive: boolean; onShop: () => void }) {
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false)
   const media = request.media
@@ -95,6 +97,12 @@ function ReelCard({ request, isActive, onShop }: { request: ShoppingRequest; isA
   const [isPlaying, setIsPlaying] = useState(true)
   const [showHud, setShowHud] = useState(false)
   const hudHideTimeoutRef = useRef<number | null>(null)
+  const [isMuted, setIsMuted] = useState(true)
+  const holdTimeoutRef = useRef<number | null>(null)
+  const isHoldingRef = useRef(false)
+  const wasPlayingBeforeHoldRef = useRef(false)
+  const suppressNextClickRef = useRef(false)
+  const suppressClickUntilRef = useRef(0)
 
   function handleScroll() {
     const el = scrollContainerRef.current
@@ -118,6 +126,54 @@ function ReelCard({ request, isActive, onShop }: { request: ShoppingRequest; isA
       el.play().catch(() => {})
     } else {
       el.pause()
+    }
+  }
+
+  function toggleMute() {
+    const el = videoRef.current
+    if (!el) return
+    const next = !el.muted
+    el.muted = next
+    setIsMuted(next)
+  }
+
+  function onPointerDown() {
+    // Start a short delay before engaging hold-to-pause to avoid jank on quick taps
+    if (holdTimeoutRef.current) window.clearTimeout(holdTimeoutRef.current)
+    isHoldingRef.current = false
+    wasPlayingBeforeHoldRef.current = false
+    holdTimeoutRef.current = window.setTimeout(() => {
+      const el = videoRef.current
+      if (!el) return
+      isHoldingRef.current = true
+      suppressNextClickRef.current = true
+      if (!el.paused) {
+        wasPlayingBeforeHoldRef.current = true
+        el.pause()
+        setIsPlaying(false)
+        showHudTemporarily()
+      }
+    }, 280)
+  }
+
+  function endHold(e?: { preventDefault?: () => void; stopPropagation?: () => void }) {
+    if (holdTimeoutRef.current) {
+      window.clearTimeout(holdTimeoutRef.current)
+      holdTimeoutRef.current = null
+    }
+    const el = videoRef.current
+    if (!el) return
+    if (isHoldingRef.current) {
+      // Prevent the subsequent synthetic click from a long press
+      suppressClickUntilRef.current = Date.now() + 500
+      if (e?.preventDefault) e.preventDefault()
+      if (e?.stopPropagation) e.stopPropagation()
+      if (wasPlayingBeforeHoldRef.current) {
+        el.play().catch(() => {})
+      }
+      isHoldingRef.current = false
+      wasPlayingBeforeHoldRef.current = false
+      // Keep boolean suppression until the time-based window expires
     }
   }
 
@@ -164,26 +220,51 @@ function ReelCard({ request, isActive, onShop }: { request: ShoppingRequest; isA
               className="absolute inset-0 w-full h-full object-cover"
               autoPlay
               loop
-              muted
+              muted={isMuted}
               playsInline
               controls={false}
-              onClick={() => { togglePlay(); showHudTemporarily() }}
+              // Prevent long-press menu and accidental selections
+              onContextMenu={(e) => e.preventDefault()}
+              style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none', touchAction: 'manipulation' }}
+              onPointerDown={onPointerDown}
+              onPointerUp={(e) => endHold(e)}
+              onPointerCancel={(e) => endHold(e)}
+              onPointerLeave={(e) => endHold(e)}
+              onMouseDown={onPointerDown}
+              onMouseUp={(e) => endHold(e)}
+              onTouchStart={onPointerDown}
+              onTouchEnd={(e) => endHold(e)}
+              onTouchCancel={(e) => endHold(e)}
+              onClick={() => {
+                const now = Date.now()
+                if (suppressNextClickRef.current || now < suppressClickUntilRef.current) {
+                  // Suppress click triggered by a hold interaction
+                  suppressNextClickRef.current = false
+                  return
+                }
+                toggleMute();
+                showHudTemporarily()
+              }}
               onPlay={() => { setIsPlaying(true); showHudTemporarily() }}
               onPause={() => { setIsPlaying(false); showHudTemporarily() }}
             />
             <button
-              aria-label={isPlaying ? 'Pause video' : 'Play video'}
+              aria-label={isMuted ? 'Unmute video' : 'Mute video'}
               className={`absolute bottom-28 right-4 z-10 h-10 w-10 rounded-full flex items-center justify-center text-white bg-black/50 hover:bg-black/60 border border-white/20 transition-opacity duration-300 ${showHud ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-              onClick={(e) => { e.stopPropagation(); togglePlay() }}
+              onClick={(e) => { e.stopPropagation(); toggleMute() }}
             >
-              {isPlaying ? (
+              {isMuted ? (
+                // Muted icon (speaker off)
                 <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                  <rect x="6" y="5" width="4" height="14" rx="1"></rect>
-                  <rect x="14" y="5" width="4" height="14" rx="1"></rect>
+                  <path d="M3 10v4h4l5 5V5L7 10H3z"></path>
+                  <path d="M16 8l5 5m0-5l-5 5" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" />
                 </svg>
               ) : (
+                // Unmuted icon (speaker on)
                 <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M8 5v14l11-7-11-7z"></path>
+                  <path d="M3 10v4h4l5 5V5L7 10H3z"></path>
+                  <path d="M16.5 8.5a5 5 0 010 7" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" />
+                  <path d="M18.5 6.5a8 8 0 010 11" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" />
                 </svg>
               )}
             </button>
