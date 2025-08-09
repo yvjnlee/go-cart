@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { requestsService } from '../../services/requestsService'
+import { requestsService } from '../../services/request.service'
 import type { ShoppingRequest } from '../../types'
 import { RequestCard } from './RequestCard'
 

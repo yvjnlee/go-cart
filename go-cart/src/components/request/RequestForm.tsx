@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { requestsService } from '../../services/requestsService'
+import { requestsService } from '../../services/request.service'
 
 interface Props {
   onCreated?: (requestId: string) => void

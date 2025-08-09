@@ -11,7 +11,7 @@ function generateId(prefix: string = 'id'): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`
 }
 
-export function Requester() {
+export function PostComposer() {
   const [caption, setCaption] = useState<string>('')
   const [media, setMedia] = useState<MediaPreview[]>([])
   const [selectedIndex, setSelectedIndex] = useState<number>(0)
@@ -205,6 +205,6 @@ export function Requester() {
   )
 }
 
-export default Requester
+export default PostComposer
 
 

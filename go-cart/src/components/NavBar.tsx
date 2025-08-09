@@ -3,7 +3,8 @@ interface Props {
   onNavigate: (view: 'feed' | 'shoppingRequests') => void
 }
 
-export function OverlayNav({ current, onNavigate }: Props) {
+export function NavBar({ current, onNavigate }: Props) {
+  // Renamed component exported as NavBar for clarity
   return (
     <div className="fixed top-0 left-0 right-0 z-50 flex justify-center p-3">
       <div className="backdrop-blur-xl bg-white/15 border border-white/25 ring-1 ring-black/10 rounded-full p-0.5 overflow-hidden pointer-events-auto flex gap-0.5">
