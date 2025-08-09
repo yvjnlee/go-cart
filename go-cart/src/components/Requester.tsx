@@ -194,7 +194,7 @@ export function Requester() {
           className={
             'inline-flex justify-center items-center rounded-md px-4 py-2 text-sm font-medium shadow-sm ' +
             (canSubmit && !submitting
-              ? 'bg-blue-600 text-white hover:bg-blue-700'
+              ? 'bg-[#6E3AFF] text-white hover:bg-[#5E2FD1]'
               : 'bg-gray-200 text-gray-500 cursor-not-allowed')
           }
         >
