@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Feed } from './components/Feed'
 import { ShoppingRequestPage } from './components/ShoppingRequestPage'
 import { OverlayNav } from './components/OverlayNav'
+import {Requester} from './components/Requester'
 
 type AppView = 'feed' | 'shoppingRequests'
 
@@ -16,7 +17,7 @@ export function App() {
           <Feed />
         </div>
         <div className={currentView === 'shoppingRequests' ? 'h-full' : 'hidden'}>
-          <ShoppingRequestPage onBack={() => setCurrentView('feed')} />
+          <Requester />
         </div>
       </div>
     </div>
