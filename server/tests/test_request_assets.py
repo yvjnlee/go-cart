@@ -38,11 +38,11 @@ class FakeDB:
 
     async def execute(self, query: str, *args):
         if query.strip().startswith("INSERT INTO request_assets"):
-            request_asset_id, request_id, url, created_at, updated_at = args
+            request_asset_id, request_id, file_key, created_at, updated_at = args
             self.request_assets[request_asset_id] = {
                 "request_asset_id": request_asset_id,
                 "request_id": request_id,
-                "url": url,
+                "file_key": file_key,
                 "created_at": created_at,
                 "updated_at": updated_at,
             }
@@ -76,21 +76,41 @@ class FakeR2Service:
         ext = ""
         if "." in filename:
             ext = "." + filename.split(".")[-1]
-        url = f"https://cdn.test/request-assets/{request_id}/{file_id}{ext}"
+        file_key = f"request-assets/{request_id}/{file_id}{ext}"
         self.uploaded.append({
             "request_id": request_id,
             "filename": filename,
             "size": len(file_content),
-            "url": url,
+            "file_key": file_key,
         })
-        return url
+        return file_key
 
-    async def delete_file(self, url: str) -> bool:
-        self.deleted.append(url)
+    async def delete_file(self, file_key: str) -> bool:
+        self.deleted.append(file_key)
         return True
 
-    def get_signed_url(self, url: str, expiration: int = 3600) -> str:
-        return f"{url}?signed=1&expires={expiration}"
+    def get_signed_url(self, file_key: str, expiration: int = 3600) -> str:
+        base = self.public_url_base.rstrip("/")
+        return f"{base}/{file_key}?signed=1&expires={expiration}"
+
+    # New helpers to support file_key-based storage
+    @property
+    def public_url_base(self) -> str:
+        return "https://cdn.test"
+
+    @property
+    def endpoint_url(self) -> str:
+        return "https://r2.example"
+
+    @property
+    def bucket_name(self) -> str:
+        return "bucket"
+
+    def build_public_url(self, file_key: str) -> str:
+        return f"{self.public_url_base}/".rstrip("/") + f"/{file_key}"
+
+    def extract_file_key(self, url: str) -> str:
+        return url.replace(f"{self.public_url_base}/", "")
 
 
 @pytest.fixture
@@ -188,7 +208,8 @@ async def test_upload_asset_dummy_image(app_overridden):
     assert resp.status_code == 200
     data = resp.json()
     assert data["request_id"] == request_id
-    assert data["url"].endswith(".png")
+    # Presigned URL may include query params; verify the path retains extension
+    assert data["url"].split("?")[0].endswith(".png")
     assert fake_r2.uploaded[-1]["filename"] == "dummy.png"
     assert fake_r2.uploaded[-1]["size"] == len(png_bytes)
 
@@ -198,19 +219,19 @@ async def test_delete_request_asset_calls_r2(app_overridden):
 
     # Seed an asset
     asset_id = str(uuid.uuid4())
-    url = f"https://cdn.test/request-assets/{request_id}/{asset_id}.png"
+    file_key = f"request-assets/{request_id}/{asset_id}.png"
     fake_db.request_assets[asset_id] = {
         "request_asset_id": asset_id,
         "request_id": request_id,
-        "url": url,
+        "file_key": file_key,
         "created_at": None,
         "updated_at": None,
     }
 
-    async with AsyncClient(app=app, base_url="http://test") as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.delete(f"/request-assets/{asset_id}")
 
     assert resp.status_code == 200
-    assert any(d == url for d in fake_r2.deleted)
+    assert any(d == file_key for d in fake_r2.deleted)
     assert asset_id not in fake_db.request_assets
 

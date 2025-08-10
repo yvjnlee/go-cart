@@ -68,7 +68,7 @@ async def create_tables():
             CREATE TABLE IF NOT EXISTS request_assets (
                 request_asset_id VARCHAR(255) PRIMARY KEY,
                 request_id VARCHAR(255) NOT NULL,
-                url VARCHAR(500) NOT NULL,
+                file_key VARCHAR(500) NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (request_id) REFERENCES requests(request_id) ON DELETE CASCADE

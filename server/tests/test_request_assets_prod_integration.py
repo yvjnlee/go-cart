@@ -46,12 +46,20 @@ async def test_prod_upload_and_cleanup_real_services():
             data={"request_id": created_request_id},
         )
         assert upload.status_code == 200
-        body_upload = upload.json()
-        assert body_upload["request_id"] == created_request_id
-        assert body_upload["url"].endswith(".txt")
+
+        # Fetch asset list for this request and validate presigned URL from list
+        list_resp = await client.get("/request-assets/", params={"request_id": created_request_id})
+        assert list_resp.status_code == 200
+        assets = list_resp.json()
+        assert isinstance(assets, list)
+        assert len(assets) >= 1
+        print(assets)
+        asset_from_list = assets[0]
+        assert asset_from_list["request_id"] == created_request_id
+        assert asset_from_list["url"].split("?")[0].endswith(".txt")
 
         # Cleanup: delete asset (should also delete from R2), then delete request
-        request_asset_id = body_upload["request_asset_id"]
+        request_asset_id = asset_from_list["request_asset_id"]
         del_asset = await client.delete(f"/request-assets/{request_asset_id}")
         assert del_asset.status_code == 200
 

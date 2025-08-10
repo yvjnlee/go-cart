@@ -40,11 +40,11 @@ class FakeDB:
 
     async def execute(self, query: str, *args):
         if query.strip().startswith("INSERT INTO request_assets"):
-            request_asset_id, request_id, url, created_at, updated_at = args
+            request_asset_id, request_id, file_key, created_at, updated_at = args
             self.request_assets[request_asset_id] = {
                 "request_asset_id": request_asset_id,
                 "request_id": request_id,
-                "url": url,
+                "file_key": file_key,
                 "created_at": created_at,
                 "updated_at": updated_at,
             }
@@ -90,7 +90,7 @@ async def test_real_r2_upload_and_delete():
             body = resp.json()
             assert body["request_id"] == request_id
             assert "request-assets/" in body["url"]
-            assert body["url"].endswith(".txt")
+            assert body["url"].split("?")[0].endswith(".txt")
 
             # Cleanup: delete from API (which should delete from R2)
             request_asset_id = body["request_asset_id"]

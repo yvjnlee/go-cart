@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 
 from ..models import RequestAssetCreate, RequestAssetUpdate, RequestAssetResponse
@@ -9,6 +9,11 @@ from ..r2_service import get_r2_service, R2Service
 
 router = APIRouter(prefix="/request-assets", tags=["request_assets"])
 
+
+def _signed_url_from_key(file_key: str, r2_service: R2Service, expiration_seconds: int = 3600) -> str:
+    """Build a presigned URL for a given file key."""
+    # public_url = r2_service.build_public_url(file_key)
+    return r2_service.get_signed_url(file_key, expiration_seconds)
 
 @router.post("/upload", response_model=RequestAssetResponse)
 async def upload_asset(
@@ -43,7 +48,7 @@ async def upload_asset(
     
     # Upload to R2
     try:
-        file_url = await r2_service.upload_file(request_id, file_content, file.filename)
+        file_key = await r2_service.upload_file(request_id, file_content, file.filename)
     except HTTPException:
         raise
     except Exception as e:
@@ -52,23 +57,25 @@ async def upload_asset(
     # Save asset record to database
     request_asset_id = str(uuid.uuid4())
     now = datetime.utcnow()
-    
+
+    # Store file_key in database
     await conn.execute("""
-        INSERT INTO request_assets (request_asset_id, request_id, url, created_at, updated_at)
+        INSERT INTO request_assets (request_asset_id, request_id, file_key, created_at, updated_at)
         VALUES ($1, $2, $3, $4, $5)
-    """, request_asset_id, request_id, file_url, now, now)
+    """, request_asset_id, request_id, file_key, now, now)
     
+    # Return a presigned URL while storing the canonical public URL
     return RequestAssetResponse(
         request_asset_id=request_asset_id,
         request_id=request_id,
-        url=file_url,
+        url=_signed_url_from_key(file_key, r2_service),
         created_at=now,
         updated_at=now
     )
 
 
 @router.post("/", response_model=RequestAssetResponse)
-async def create_request_asset(asset: RequestAssetCreate, conn=Depends(get_db)):
+async def create_request_asset(asset: RequestAssetCreate, conn=Depends(get_db), r2_service: R2Service = Depends(get_r2_service)):
     """Create a new request asset record (for external URLs)"""
     
     # Validate that the request exists
@@ -82,14 +89,14 @@ async def create_request_asset(asset: RequestAssetCreate, conn=Depends(get_db)):
     now = datetime.utcnow()
     
     await conn.execute("""
-        INSERT INTO request_assets (request_asset_id, request_id, url, created_at, updated_at)
+        INSERT INTO request_assets (request_asset_id, request_id, file_key, created_at, updated_at)
         VALUES ($1, $2, $3, $4, $5)
-    """, request_asset_id, asset.request_id, asset.url, now, now)
+    """, request_asset_id, asset.request_id, asset.file_key, now, now)
     
     return RequestAssetResponse(
         request_asset_id=request_asset_id,
         request_id=asset.request_id,
-        url=asset.url,
+        url=_signed_url_from_key(asset.file_key, r2_service),
         created_at=now,
         updated_at=now
     )
@@ -98,7 +105,8 @@ async def create_request_asset(asset: RequestAssetCreate, conn=Depends(get_db)):
 @router.get("/", response_model=List[RequestAssetResponse])
 async def get_request_assets(
     request_id: Optional[str] = None, 
-    conn=Depends(get_db)
+    conn=Depends(get_db),
+    r2_service: R2Service = Depends(get_r2_service)
 ):
     """Get all request assets, optionally filtered by request_id"""
     
@@ -109,12 +117,23 @@ async def get_request_assets(
         )
     else:
         rows = await conn.fetch("SELECT * FROM request_assets ORDER BY created_at DESC")
-    
-    return [RequestAssetResponse(**dict(row)) for row in rows]
+
+    responses: List[RequestAssetResponse] = []
+    for row in rows:
+        data = dict(row)
+        file_key = data.get("file_key")
+        responses.append(RequestAssetResponse(
+            request_asset_id=data["request_asset_id"],
+            request_id=data["request_id"],
+            url=_signed_url_from_key(file_key, r2_service),
+            created_at=data["created_at"],
+            updated_at=data["updated_at"],
+        ))
+    return responses
 
 
 @router.get("/{request_asset_id}", response_model=RequestAssetResponse)
-async def get_request_asset(request_asset_id: str, conn=Depends(get_db)):
+async def get_request_asset(request_asset_id: str, conn=Depends(get_db), r2_service: R2Service = Depends(get_r2_service)):
     """Get a specific request asset by ID"""
     
     row = await conn.fetchrow(
@@ -124,14 +143,23 @@ async def get_request_asset(request_asset_id: str, conn=Depends(get_db)):
     if not row:
         raise HTTPException(status_code=404, detail="Request asset not found")
     
-    return RequestAssetResponse(**dict(row))
+    data = dict(row)
+    file_key = data.get("file_key")
+    return RequestAssetResponse(
+        request_asset_id=data["request_asset_id"],
+        request_id=data["request_id"],
+        url=_signed_url_from_key(file_key, r2_service),
+        created_at=data["created_at"],
+        updated_at=data["updated_at"],
+    )
 
 
 @router.put("/{request_asset_id}", response_model=RequestAssetResponse)
 async def update_request_asset(
     request_asset_id: str, 
     asset: RequestAssetUpdate, 
-    conn=Depends(get_db)
+    conn=Depends(get_db),
+    r2_service: R2Service = Depends(get_r2_service)
 ):
     """Update a request asset"""
     
@@ -170,7 +198,15 @@ async def update_request_asset(
         "SELECT * FROM request_assets WHERE request_asset_id = $1", 
         request_asset_id
     )
-    return RequestAssetResponse(**dict(updated_row))
+    data = dict(updated_row)
+    file_key = data.get("file_key")
+    return RequestAssetResponse(
+        request_asset_id=data["request_asset_id"],
+        request_id=data["request_id"],
+        url=_signed_url_from_key(file_key, r2_service),
+        created_at=data["created_at"],
+        updated_at=data["updated_at"],
+    )
 
 
 @router.delete("/{request_asset_id}")
@@ -201,8 +237,8 @@ async def delete_request_asset(
     # Optionally delete from R2 storage
     if delete_from_r2:
         try:
-            asset_url = dict(asset_row)["url"]
-            await r2_service.delete_file(asset_url)
+            file_key = dict(asset_row)["file_key"]
+            await r2_service.delete_file(file_key)
         except HTTPException as e:
             # Log warning but don't fail the operation
             print(f"Warning: Failed to delete file from R2: {e.detail}")
@@ -229,14 +265,15 @@ async def get_signed_url(
     if not asset_row:
         raise HTTPException(status_code=404, detail="Request asset not found")
     
-    asset_url = dict(asset_row)["url"]
+    file_key = dict(asset_row)["file_key"]
     
     try:
-        signed_url = r2_service.get_signed_url(asset_url, expiration)
+        # public_url = r2_service.build_public_url(file_key)
+        signed_url = r2_service.get_signed_url(file_key, expiration)
         return {
             "signed_url": signed_url,
             "expires_in": expiration,
-            "original_url": asset_url
+            # "original_url": public_url
         }
     except HTTPException:
         raise

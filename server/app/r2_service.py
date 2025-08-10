@@ -4,7 +4,6 @@ import uuid
 from botocore.config import Config
 from botocore.exceptions import ClientError
 from fastapi import HTTPException
-from typing import Optional
 import mimetypes
 from dotenv import load_dotenv
 
@@ -74,15 +73,8 @@ class R2Service:
                 # Make file publicly readable if needed
                 ACL='public-read'
             )
-            
-            # Generate public URL
-            if self.public_url_base:
-                public_url = f"{self.public_url_base.rstrip('/')}/{file_key}"
-            else:
-                # Fallback to S3-style URL
-                public_url = f"{self.endpoint_url}/{self.bucket_name}/{file_key}"
-            
-            return public_url
+
+            return file_key
             
         except ClientError as e:
             raise HTTPException(
@@ -95,7 +87,7 @@ class R2Service:
                 detail=f"Unexpected error during file upload: {str(e)}"
             )
     
-    async def delete_file(self, url: str) -> bool:
+    async def delete_file(self, file_key: str) -> bool:
         """
         Delete a file from R2 storage using its URL
         
@@ -106,14 +98,6 @@ class R2Service:
             True if deletion was successful
         """
         try:
-            # Extract file key from URL
-            if self.public_url_base and url.startswith(self.public_url_base):
-                file_key = url.replace(f"{self.public_url_base.rstrip('/')}/", "")
-            else:
-                # Parse S3-style URL
-                url_parts = url.replace(f"{self.endpoint_url}/{self.bucket_name}/", "")
-                file_key = url_parts
-            
             # Delete file from R2
             self.s3_client.delete_object(
                 Bucket=self.bucket_name,
@@ -136,7 +120,7 @@ class R2Service:
                 detail=f"Unexpected error during file deletion: {str(e)}"
             )
     
-    def get_signed_url(self, url: str, expiration: int = 3600) -> str:
+    def get_signed_url(self, file_key: str, expiration: int = 3600) -> str:
         """
         Generate a signed URL for private file access
         
@@ -148,13 +132,6 @@ class R2Service:
             Signed URL for temporary access
         """
         try:
-            # Extract file key from URL
-            if self.public_url_base and url.startswith(self.public_url_base):
-                file_key = url.replace(f"{self.public_url_base.rstrip('/')}/", "")
-            else:
-                url_parts = url.replace(f"{self.endpoint_url}/{self.bucket_name}/", "")
-                file_key = url_parts
-            
             # Generate signed URL
             signed_url = self.s3_client.generate_presigned_url(
                 'get_object',

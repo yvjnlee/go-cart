@@ -74,12 +74,12 @@ class CartProductResponse(BaseModel):
 # Request Asset models
 class RequestAssetCreate(BaseModel):
     request_id: str
-    url: str
+    file_key: str
 
 
 class RequestAssetUpdate(BaseModel):
     request_id: Optional[str] = None
-    url: Optional[str] = None
+    file_key: Optional[str] = None
 
 
 class RequestAssetResponse(BaseModel):

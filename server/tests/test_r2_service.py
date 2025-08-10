@@ -44,20 +44,20 @@ def test_upload_and_delete_and_signed_url(monkeypatch):
 
     # Upload
     import asyncio
-    url = asyncio.get_event_loop().run_until_complete(
+    file_key = asyncio.get_event_loop().run_until_complete(
         svc.upload_file("req123", b"data", "pic.png")
     )
-    assert url.startswith("https://cdn.example.com/request-assets/req123/")
+    assert file_key.startswith("request-assets/req123/")
     assert len(dummy.put_calls) == 1
     assert dummy.put_calls[0]["Bucket"] == "bucket"
     assert dummy.put_calls[0]["ContentType"] == "image/png"
 
     # Signed URL
-    signed = svc.get_signed_url(url, expiration=123)
+    signed = svc.get_signed_url(file_key, expiration=123)
     assert "expires=123" in signed
 
     # Delete
-    ok = asyncio.get_event_loop().run_until_complete(svc.delete_file(url))
+    ok = asyncio.get_event_loop().run_until_complete(svc.delete_file(file_key))
     assert ok is True
     assert len(dummy.delete_calls) == 1
 
