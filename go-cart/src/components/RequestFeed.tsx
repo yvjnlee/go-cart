@@ -1,16 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { requestsService } from '../services/request.service'
-import { curationService, type CuratedSection, type CuratedStore } from '../services/curation.service'
-import type { CartItem, ShoppingRequest, CartItemProductSnapshot } from '../types'
+import { SearchProvider, SearchInput, SearchResultsList, ProductCard, Button, useShopCartActions, useCuratedProducts, usePopularProducts, useRecommendedProducts, Carousel, CarouselContent, CarouselItem } from '@shopify/shop-minis-react'
+// We can optionally use FAL-generated copy to build a topic handle for SDK queries
+// removed curated services for this overlay; we use built-in Search
+import type { CartItem, ShoppingRequest } from '../types'
 import { CartItemEditor } from './cart/CartItemEditor'
 import { CartItemList } from './cart/CartItemList'
 import { CartSubmitForm } from './cart/CartSubmitForm'
+import { getOrGenerateCartProfileCopy } from '../services/fal.service'
+import { curationService } from '../services/curation.service'
 
 export function RequestFeed() {
   const [requests, setRequests] = useState<ShoppingRequest[] | null>(null)
   const [selectedRequest, setSelectedRequest] = useState<ShoppingRequest | null>(null)
   const [items, setItems] = useState<CartItem[]>([])
   const [showCurated, setShowCurated] = useState(false)
+  // navigation used within overlays when rendering Search results
   const scrollFeedRef = useRef<HTMLDivElement | null>(null)
   const [activeIndex, setActiveIndex] = useState(0)
 
@@ -401,9 +406,9 @@ function BuilderOverlay({
 
 function CurationsOverlay({
   request,
-  items,
-  onAddItem,
-  onRemoveItem,
+  items: _items,
+  onAddItem: _onAddItem,
+  onRemoveItem: _onRemoveItem,
   onClose,
 }: {
   request: ShoppingRequest
@@ -412,94 +417,83 @@ function CurationsOverlay({
   onRemoveItem: (idx: number) => void
   onClose: () => void
 }) {
-  const [sections, setSections] = useState<CuratedSection[] | null>(null)
-  const [stores, setStores] = useState<CuratedStore[] | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { addToCart } = useShopCartActions()
+  const areaRef = useRef<HTMLDivElement | null>(null)
+  const inputRef = useRef<HTMLDivElement | null>(null)
+  const [listHeight, setListHeight] = useState<number>(Math.floor(window.innerHeight * 0.72))
 
+  // Derive a curated handle from FAL persona to improve product targeting
+  const [falHandle, setFalHandle] = useState<string | null>(null)
+  const [searchPlaceholder, setSearchPlaceholder] = useState<string>('Search products...')
   useEffect(() => {
     let cancelled = false
-    setLoading(true)
-    setError(null)
-    Promise.all([
-      curationService.getCuratedSections(request),
-      curationService.getCuratedStores(request),
-    ])
-      .then(([secs, sts]) => {
-        if (cancelled) return
-        setSections(secs)
-        setStores(sts)
-      })
-      .catch(err => { if (!cancelled) setError(err?.message || 'Failed to load curations') })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [request])
+    ;(async () => {
+      try {
+        const copy = await getOrGenerateCartProfileCopy(request, [])
+        // Build a richer topic handle using request occasion, budget tier, inferred category, and vibe/name
+        const text = `${request.title || ''} ${request.description || ''}`.toLowerCase()
+        const occasion = (request.occasion || '').toString().toLowerCase().trim()
+        const budget = Number(request.budget || 0)
+        const budgetTier = budget <= 50 ? 'under-50' : budget <= 100 ? 'under-100' : budget <= 200 ? 'under-200' : budget <= 500 ? 'under-500' : 'premium'
+        // naive category inference from request text
+        const isFashion = /(dress|jacket|shirt|pants|jeans|skirt|sneakers|shoes|bag|coat|hoodie|sweater)/.test(text)
+        const isHome = /(sofa|couch|chair|table|lamp|decor|pillow|vase|rug|sheets|bedding|kitchen)/.test(text)
+        const category = isFashion ? 'fashion' : isHome ? 'home' : 'gifts'
+        const vibe = (copy?.vibe || copy?.name || copy?.prompts?.[0]?.answer || '').toString().toLowerCase()
+        const base = [category, occasion, vibe, budgetTier]
+          .filter(Boolean)
+          .join('-')
+          .toLowerCase()
+        const slug = base
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '')
+        const handle = slug ? `topic-${slug}` : `request-${request.id}`
+        if (!cancelled) {
+          setFalHandle(handle)
+          const occText = occasion ? `${occasion} ` : ''
+          const catText = category ? `${category} ` : ''
+          const budgetText = budget ? `under $${budget}` : ''
+          const ph = `Search ${occText}${catText}${budgetText}`.trim() || 'Search products...'
+          setSearchPlaceholder(ph)
+        }
+      } catch {
+        if (!cancelled) {
+          setFalHandle(`request-${request.id}`)
+          const budget = Number(request.budget || 0)
+          const budgetText = budget ? `under $${budget}` : ''
+          setSearchPlaceholder(`Search ${budgetText}`.trim() || 'Search products...')
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [request.id, request.title])
 
-  // Build mixed feed of products and stores
-  const productSnapshots: CartItemProductSnapshot[] = useMemo(() => {
-    if (!sections) return []
-    const all = sections.flatMap(s => s.products)
-    const seen = new Set<string>()
-    return all.filter(p => {
-      if (seen.has(p.id)) return false
-      seen.add(p.id)
-      return true
+  // Measure available height for the virtualized list for reliable scrolling
+  useEffect(() => {
+    const container = areaRef.current
+    if (!container) return
+    const ro = new ResizeObserver(() => {
+      const containerHeight = container.getBoundingClientRect().height
+      const inputHeight = inputRef.current?.getBoundingClientRect().height || 0
+      const next = Math.max(0, Math.floor(containerHeight - inputHeight))
+      setListHeight(next)
     })
-  }, [sections])
-
-  // Split layout: products grid and a separate stores row
-
-  function SimpleProductTile({ p, inCartIdx }: { p: CartItemProductSnapshot; inCartIdx: number }) {
-    return (
-      <div className="group relative rounded-xl overflow-hidden border border-gray-200 bg-white shadow-sm transition hover:shadow-md">
-        <div className="w-full bg-gray-100 aspect-[4/5]">
-          {p.imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={p.imageUrl} alt={p.title || 'Product'} className="w-full h-full object-cover" />
-          ) : (
-            <div className="w-full h-full bg-gray-100" />
-          )}
-        </div>
-        <div className="p-3">
-          <div className="text-sm font-semibold text-gray-900 line-clamp-2">{p.title || p.id}</div>
-          <div className="mt-1 flex items-center justify-between gap-2">
-            <div className="text-[13px] text-gray-600">{p.priceCurrencyCode || 'USD'} {p.priceAmount ?? '-'}</div>
-            <div>
-              {inCartIdx >= 0 ? (
-                <button className="text-[11px] px-2 py-1 rounded-md border border-gray-300 bg-white/95 shadow-sm hover:bg-white" onClick={() => onRemoveItem(inCartIdx)}>Remove</button>
-              ) : (
-                <button className="text-[11px] px-2 py-1 rounded-md bg-[#5A31F4] text-white shadow-sm hover:bg-[#4E28D6]" onClick={() => onAddItem({ product: p, quantity: 1 })}>Add</button>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  function SimpleStoreTile({ name, imageUrl }: { name: string; imageUrl?: string }) {
-    return (
-      <div className="rounded-xl overflow-hidden border border-gray-200 bg-white shadow-sm p-3 flex items-center gap-3">
-        <div className="h-10 w-10 rounded-full bg-gray-100 overflow-hidden flex items-center justify-center text-gray-400 text-sm">
-          {imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={imageUrl} alt={name} className="h-full w-full object-cover" />
-          ) : (
-            <span>{name.slice(0,1)}</span>
-          )}
-        </div>
-        <div>
-          <div className="text-sm font-semibold text-gray-900">{name}</div>
-          <div className="text-xs text-gray-600 mt-0.5">Store</div>
-        </div>
-      </div>
-    )
-  }
+    ro.observe(container)
+    // Also trigger once initially
+    const containerHeight = container.getBoundingClientRect().height
+    const inputHeight = inputRef.current?.getBoundingClientRect().height || 0
+    setListHeight(Math.max(0, Math.floor(containerHeight - inputHeight)))
+    return () => {
+      ro.disconnect()
+    }
+  }, [])
 
   return (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl border-t border-gray-200 max-h-[92vh] overflow-y-auto">
+      <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl border-t border-gray-200 h-[92vh] flex flex-col">
         <div className="p-4 border-b sticky top-0 bg-white z-10 flex items-center justify-between">
           <div>
             <h4 className="text-base font-semibold">Shop for “{request.title}”</h4>
@@ -507,47 +501,160 @@ function CurationsOverlay({
           </div>
           <button onClick={onClose} className="text-sm text-gray-600 hover:text-gray-800">Close</button>
         </div>
-
-        {loading ? (
-          <div className="py-12 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"/></div>
-        ) : error ? (
-          <div className="p-4 text-sm text-red-600">{error}</div>
-        ) : (
-          <div className="p-4 space-y-6">
-            {/* Stores row at top */}
-            <section>
-              <div className="mb-2 px-0.5">
-                <h5 className="text-sm font-semibold text-gray-900">Stores</h5>
-              </div>
-              <div className="-mx-1 overflow-x-auto">
-                <div className="px-1 flex gap-3">
-                  {(stores ?? []).map((s, idx) => (
-                    <div key={`s-${idx}`} className="w-40 shrink-0">
-                      <SimpleStoreTile name={s.name} imageUrl={s.imageUrl} />
-                    </div>
-                  ))}
+        <div
+          className="flex-1 min-h-0 overflow-y-auto"
+          ref={areaRef}
+          style={{ WebkitOverflowScrolling: 'touch' as any, overscrollBehavior: 'contain', touchAction: 'pan-y' as any }}
+        >
+          <SearchProvider>
+            {/* Inline search input that scrolls with content, but stays visible at top of this area */}
+            <div className="px-4 pt-3 pb-2 sticky top-0 bg-white z-10" ref={inputRef}>
+              <SearchInput placeholder={searchPlaceholder} />
+            </div>
+            {/* Always show curated row at the top for this request */}
+            <CuratedRows request={request} handleOverride={falHandle ?? undefined} />
+            {/* Results list – shows curated rows when query is empty, otherwise results */}
+            <SearchResultsList
+              height={listHeight}
+              itemHeight={192}
+              initialStateComponent={<DefaultRows />}
+              renderItem={(product: any) => (
+                <div className="px-3 pb-3">
+                  <div className="relative">
+                    <ProductCard product={product} />
+                    <Button
+                      size="sm"
+                      className="absolute bottom-3 left-3 bg-white/95 text-gray-900"
+                      onClick={(e: any) => {
+                        e.stopPropagation()
+                        addToCart({
+                          productId: product.id,
+                          productVariantId: product.selectedVariant?.id || product.defaultVariantId,
+                          quantity: 1,
+                        })
+                      }}
+                    >
+                      Add
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            </section>
+              )}
+              showScrollbar
+            />
+          </SearchProvider>
+        </div>
+      </div>
+    </div>
+  )
+}
 
-            {/* Products grid */}
-            <section>
-              <div className="mb-2 px-0.5">
-                <h5 className="text-sm font-semibold text-gray-900">Products</h5>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {productSnapshots.map((p, idx) => {
-                  const inCartIdx = items.findIndex(it => it.product.id === p.id)
-                  return (
-                    <div key={`p-${idx}`} className="relative">
-                      <SimpleProductTile p={p} inCartIdx={inCartIdx} />
-                    </div>
-                  )
-                })}
-              </div>
-            </section>
+function CuratedRows({ request, handleOverride }: { request: ShoppingRequest; handleOverride?: string }) {
+  // Example: curated by a handle that could map to request id or topic, and a popular fallback
+  const curatedHandle = handleOverride || `request-${request.id}`
+  const { products: curated } = useCuratedProducts({ handle: curatedHandle, skip: false })
+  const { products: popular } = usePopularProducts({ skip: false })
+  const { products: recommended } = useRecommendedProducts({ skip: false })
+  const [fallbackCurated, setFallbackCurated] = useState<any[]>([])
+  const hasSdkCurated = Array.isArray(curated) && curated.length > 0
+
+  // If SDK curation returns nothing, use our local lightweight curation as a fallback
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const sections = await curationService.getCuratedSections(request)
+        const primary = sections?.[0]?.products ?? []
+        if (!cancelled) setFallbackCurated(primary)
+      } catch {
+        if (!cancelled) setFallbackCurated([])
+      }
+    })()
+    return () => { cancelled = true }
+  }, [request])
+
+  const curatedList = hasSdkCurated ? curated : fallbackCurated
+  const rows = [
+    { title: 'Curated for this request', list: curatedList },
+    { title: 'Recommended for you', list: recommended },
+    { title: 'Popular now', list: popular },
+  ]
+
+  return (
+    <div className="px-3 pt-3 pb-2 space-y-5">
+      {rows.map((row, idx) => (
+        row.list && row.list.length > 0 ? (
+          <section key={idx}>
+            <div className="mb-2 px-1">
+              <h5 className="text-sm font-semibold text-gray-900">{row.title}</h5>
+            </div>
+            {/* Creative carousel presentation */}
+            <Carousel className="-mx-2">
+              <CarouselContent>
+                {row.title === 'Curated for this request' && !hasSdkCurated
+                  ? row.list.map((p: any) => (
+                      <CarouselItem key={p.id} className="basis-[70%] sm:basis-1/3 px-2 mb-1">
+                        <SnapshotCard snapshot={p} />
+                      </CarouselItem>
+                    ))
+                  : row.list.map((p: any) => (
+                      <CarouselItem key={p.id} className="basis-[70%] sm:basis-1/3 px-2 mb-1">
+                        <ProductCard product={p} />
+                      </CarouselItem>
+                    ))}
+              </CarouselContent>
+            </Carousel>
+          </section>
+        ) : null
+      ))}
+    </div>
+  )
+}
+
+function DefaultRows() {
+  const { products: popular } = usePopularProducts({ skip: false })
+  const { products: recommended } = useRecommendedProducts({ skip: false })
+
+  const rows = [
+    { title: 'Recommended for you', list: recommended },
+    { title: 'Popular now', list: popular },
+  ]
+
+  return (
+    <div className="px-3 pt-3 pb-2 space-y-5">
+      {rows.map((row, idx) => (
+        row.list && row.list.length > 0 ? (
+          <section key={idx}>
+            <div className="mb-2 px-1">
+              <h5 className="text-sm font-semibold text-gray-900">{row.title}</h5>
+            </div>
+            <Carousel className="-mx-2">
+              <CarouselContent>
+                {row.list.map((p: any) => (
+                  <CarouselItem key={p.id} className="basis-[70%] sm:basis-1/3 px-2 mb-1">
+                    <ProductCard product={p} />
+                  </CarouselItem>
+                ))}
+              </CarouselContent>
+            </Carousel>
+          </section>
+        ) : null
+      ))}
+    </div>
+  )
+}
+
+function SnapshotCard({ snapshot }: { snapshot: { id: string; title?: string; imageUrl?: string; priceAmount?: number; priceCurrencyCode?: string } }) {
+  return (
+    <div className="border rounded-xl overflow-hidden bg-white">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={snapshot.imageUrl} alt={snapshot.title || 'product'} className="w-full h-48 object-cover" />
+      <div className="p-2">
+        <div className="text-sm font-medium text-gray-900 line-clamp-2 min-h-[2.5rem]">{snapshot.title}</div>
+        {snapshot.priceAmount ? (
+          <div className="text-sm text-gray-700 mt-1">
+            {snapshot.priceCurrencyCode || 'USD'} ${snapshot.priceAmount}
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   )
