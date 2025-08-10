@@ -18,7 +18,10 @@ export function App() {
           <RequestFeed />
         </div>
         <div className={currentView === 'shoppingRequests' ? 'h-full overflow-y-auto' : 'hidden'}>
-          <PostComposer />
+          <PostComposer onBack={() => {
+            console.log('App: X button callback triggered, setting view to feed')
+            setCurrentView('feed')
+          }} />
         </div>
       </div>
     </div>

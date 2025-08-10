@@ -13,7 +13,7 @@ function generateId(prefix: string = 'id'): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`
 }
 
-export function PostComposer() {
+export function PostComposer({ onBack }: { onBack?: () => void }) {
   const [caption, setCaption] = useState<string>('')
   const [media, setMedia] = useState<MediaPreview[]>([])
   const [selectedIndex, setSelectedIndex] = useState<number>(0)
@@ -140,7 +140,21 @@ export function PostComposer() {
   console.log('PostComposer render - media.length:', media.length, 'canSubmit:', canSubmit)
 
   return (
-    <div className="min-h-full pt-15 p-6 pb-8 bg-gray-50">
+    <div className="min-h-full pt-15 p-6 pb-8 bg-gray-50 relative">
+      {onBack && (
+        <button
+          onClick={() => {
+            console.log('X button clicked - navigating back to feed')
+            onBack()
+          }}
+          className="fixed top-6 left-6 z-50 p-3 rounded-full bg-white shadow-lg hover:shadow-xl transition-shadow border border-gray-200"
+          aria-label="Go back to feed"
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="text-gray-700">
+            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/>
+          </svg>
+        </button>
+      )}
       <form onSubmit={handleSubmit} className="space-y-6 max-w-2xl mx-auto">
         <div className="text-center space-y-2">
           <h2 className="text-2xl font-bold text-gray-900">Create a Post</h2>
@@ -264,17 +278,7 @@ export function PostComposer() {
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-4 pt-2">
-        <button
-          type="button"
-          onClick={resetForm}
-          className="inline-flex justify-center items-center rounded-full px-6 py-3 text-sm font-medium border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 hover:border-gray-400 transition-all"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="mr-2">
-            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/>
-          </svg>
-          Cancel
-        </button>
+      <div className="flex justify-center pt-2">
         <button
           type="submit"
           disabled={!canSubmit || submitting}
@@ -296,24 +300,17 @@ export function PostComposer() {
               : 'bg-gray-200 text-gray-500 cursor-not-allowed'
           }`}
         >
-          <div className="flex items-center gap-2">
-            {submitting ? (
-              <>
-                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
-                  <path className="opacity-75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                </svg>
-                Publishing…
-              </>
-            ) : (
-              <>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-                </svg>
-                Post
-              </>
-            )}
-          </div>
+          {submitting ? (
+            <div className="flex items-center gap-2">
+              <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
+                <path className="opacity-75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+              </svg>
+              Publishing…
+            </div>
+          ) : (
+            'Post'
+          )}
         </button>
       </div>
       </form>

@@ -121,10 +121,7 @@ function ReelCard({ request, isActive, onShop }: { request: ShoppingRequest; isA
   const suppressNextClickRef = useRef(false)
   const suppressClickUntilRef = useRef(0)
   
-  // Cart animation states
-  const [cartShaking, setCartShaking] = useState(false)
-  const [cartExpanded, setCartExpanded] = useState(false)
-  const cartTimeoutRef = useRef<number | null>(null)
+
 
   function handleScroll() {
     const el = scrollContainerRef.current
@@ -222,42 +219,9 @@ function ReelCard({ request, isActive, onShop }: { request: ShoppingRequest; isA
     }
   }, [isActive])
 
-  // Handle cart animation for all active cards (videos and images)
-  useEffect(() => {
-    if (!isActive) {
-      // Reset cart animation when card becomes inactive
-      if (cartTimeoutRef.current) {
-        clearTimeout(cartTimeoutRef.current)
-        cartTimeoutRef.current = null
-      }
-      setCartShaking(false)
-      setCartExpanded(false)
-    } else {
-      // Start cart animation timer when card becomes active
-      cartTimeoutRef.current = window.setTimeout(() => {
-        console.log('Starting cart shake animation')
-        setCartShaking(true)
-        // After shaking for 1 second, expand the button
-        setTimeout(() => {
-          console.log('Expanding cart button')
-          setCartShaking(false)
-          setCartExpanded(true)
-        }, 1000)
-      }, 3000)
-    }
-  }, [isActive])
 
-  // Cleanup cart timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (cartTimeoutRef.current) {
-        clearTimeout(cartTimeoutRef.current)
-      }
-    }
-  }, [])
 
-  // Debug logging
-  console.log('ReelCard render:', { isActive, cartShaking, cartExpanded })
+
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-black">
@@ -346,30 +310,7 @@ function ReelCard({ request, isActive, onShop }: { request: ShoppingRequest; isA
         </div>
       )}
 
-      <button
-        className={`absolute bottom-28 right-4 z-10 rounded-full text-sm font-semibold text-white bg-gradient-to-r from-[#5A31F4] to-[#6E3AFF] hover:from-[#4E28D6] hover:to-[#5E2FD1] shadow-lg shadow-purple-500/25 transform hover:scale-105 transition-all duration-300 backdrop-blur-sm border border-white/10 ${
-          cartShaking ? 'animate-shake' : ''
-        } ${
-          cartExpanded ? 'px-6 py-3' : 'p-3'
-        }`}
-        onClick={onShop}
-      >
-        <div className={`flex items-center ${cartExpanded ? 'gap-2' : 'justify-center'}`}>
-          <svg 
-            width="20" 
-            height="20" 
-            viewBox="0 0 24 24" 
-            fill="currentColor"
-          >
-            <path d="M7 18c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12L8.1 13h7.45c.75 0 1.41-.41 1.75-1.03L21.7 4H5.21l-.94-2H1zm16 16c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
-          </svg>
-          <span className={`whitespace-nowrap transition-all duration-300 ${
-            cartExpanded ? 'opacity-100 max-w-32' : 'opacity-0 max-w-0 overflow-hidden'
-          }`}>
-            Shop for them
-          </span>
-        </div>
-      </button>
+
 
       {null}
 
@@ -393,21 +334,34 @@ function ReelCard({ request, isActive, onShop }: { request: ShoppingRequest; isA
           <div className="relative">
             <p className="text-white/95 text-sm leading-relaxed line-clamp-2">{request.description}</p>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/20">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="text-green-400">
-                <path d="M12 2C13.1 2 14 2.9 14 4C14 5.1 13.1 6 12 6C10.9 6 10 5.1 10 4C10 2.9 10.9 2 12 2ZM21 9V7L15 4L13 5V7H11V5L9 4L3 7V9H21ZM2 10V12H4V22H20V12H22V10H2Z"/>
-              </svg>
-              <span className="text-white/95 text-xs font-medium">${request.budget}</span>
-            </div>
-            {request.occasion ? (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/20">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="text-purple-400">
-                  <path d="M19 3H18V1H16V3H8V1H6V3H5C3.89 3 3 3.9 3 5V19C3 20.1 3.89 21 5 21H19C20.1 21 21 20.1 21 19V5C21 3.9 20.1 3 19 3ZM19 19H5V8H19V19Z"/>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="text-green-400">
+                  <path d="M12 2C13.1 2 14 2.9 14 4C14 5.1 13.1 6 12 6C10.9 6 10 5.1 10 4C10 2.9 10.9 2 12 2ZM21 9V7L15 4L13 5V7H11V5L9 4L3 7V9H21ZM2 10V12H4V22H20V12H22V10H2Z"/>
                 </svg>
-                <span className="text-white/95 text-xs font-medium">{request.occasion}</span>
+                <span className="text-white/95 text-xs font-medium">${request.budget}</span>
               </div>
-            ) : null}
+              {request.occasion ? (
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/20">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="text-purple-400">
+                    <path d="M19 3H18V1H16V3H8V1H6V3H5C3.89 3 3 3.9 3 5V19C3 20.1 3.89 21 5 21H19C20.1 21 21 20.1 21 19V5C21 3.9 20.1 3 19 3ZM19 19H5V8H19V19Z"/>
+                  </svg>
+                  <span className="text-white/95 text-xs font-medium">{request.occasion}</span>
+                </div>
+              ) : null}
+            </div>
+            <button
+              className="px-4 py-2 rounded-full text-xs font-semibold text-white bg-gradient-to-r from-[#5A31F4] to-[#6E3AFF] hover:from-[#4E28D6] hover:to-[#5E2FD1] shadow-lg shadow-purple-500/25 transform hover:scale-105 transition-all duration-200 backdrop-blur-sm border border-white/10"
+              onClick={onShop}
+            >
+              <div className="flex items-center gap-2">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M7 18c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12L8.1 13h7.45c.75 0 1.41-.41 1.75-1.03L21.7 4H5.21l-.94-2H1zm16 16c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+                </svg>
+                Shop for them
+              </div>
+            </button>
           </div>
         </div>
       </div>
