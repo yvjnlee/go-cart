@@ -2,12 +2,15 @@ from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
 from typing import List, Optional
 from datetime import datetime, timezone
 import uuid
+import logging
 
 from ..models import RequestAssetCreate, RequestAssetUpdate, RequestAssetResponse
 from ..database import get_db
 from ..r2_service import get_r2_service, R2Service
 
 router = APIRouter(prefix="/request-assets", tags=["request_assets"])
+
+logger = logging.getLogger(__name__)
 
 
 def _signed_url_from_key(file_key: str, r2_service: R2Service, expiration_seconds: int = 3600) -> str:
@@ -65,13 +68,29 @@ async def upload_asset(
     """, request_asset_id, request_id, file_key, now, now)
     
     # Return a presigned URL while storing the canonical public URL
-    return RequestAssetResponse(
+    response = RequestAssetResponse(
         request_asset_id=request_asset_id,
         request_id=request_id,
         url=_signed_url_from_key(file_key, r2_service),
         created_at=now,
         updated_at=now
     )
+
+    # Log successful upload
+    try:
+        logger.info(
+            "Uploaded asset: request_id=%s request_asset_id=%s filename=%s content_type=%s size_bytes=%s",
+            request_id,
+            request_asset_id,
+            file.filename,
+            getattr(file, "content_type", None),
+            len(file_content),
+        )
+    except Exception:
+        # avoid breaking the response on logging errors
+        pass
+
+    return response
 
 
 @router.post("/", response_model=RequestAssetResponse)
