@@ -1,5 +1,5 @@
 import type { CartItemProductSnapshot, ShoppingRequest } from '../types'
-import { fal } from '@fal-ai/serverless-client'
+import fal from '@fal-ai/serverless-client'
 
 // Configure FAL if credentials exist; otherwise calls will fall back to local synthesis
 const FAL_KEY = (import.meta as any).env?.VITE_FAL_KEY as string | undefined
@@ -13,12 +13,24 @@ export interface CartProfileCopy {
   productTaglines: Record<string, string> // key by product.id
 }
 
+export interface GeneratedTagsResult {
+  summary: string
+  tags: string[]
+}
+
 // In-memory optimistic cache keyed by request + product ids
 const cartProfileCache = new Map<string, CartProfileCopy>()
+const requestTagsCache = new Map<string, GeneratedTagsResult>()
 
 export function makeCartProfileKey(request: ShoppingRequest, products: CartItemProductSnapshot[]): string {
   const ids = [...products.map(p => p.id)].sort().join('|')
   return `${request.id}::${ids}`
+}
+
+function makeRequestTagsKey(request: ShoppingRequest): string {
+  // Key on stable request fields likely to affect tags
+  const mediaKey = request.media?.text || (request.media?.urls || []).join('|') || ''
+  return `${request.id}::${request.title}::${request.description}::${mediaKey}`
 }
 
 function buildPrompt(request: ShoppingRequest, products: CartItemProductSnapshot[]): string {
@@ -79,7 +91,7 @@ export async function generateCartSpotlightCopy(
       // eslint-disable-next-line no-console
       console.debug('[fal] calling model for cart profile', { requestId: request.id, productCount: products.length })
       const model = 'fal-ai/llama-3.1-8b-instruct'
-      const response = await fal.run(model, {
+      const response: any = await fal.run(model, {
         input: {
           prompt,
           temperature: options?.temperature ?? 0.7,
@@ -108,6 +120,101 @@ export async function generateCartSpotlightCopy(
 
   // No SDK; fallback
   return localFallbackCopy(request, products)
+}
+
+function buildTagsPrompt(request: ShoppingRequest): string {
+  const lines: string[] = []
+  lines.push('You are an expert retail merchandiser and social commerce strategist.')
+  lines.push('Summarize the user\'s media post and generate high-signal shopping intent tags we can use to curate products.')
+  lines.push('Use short, lowercase tags with hyphens where helpful (e.g., "summer-brunch", "budget-gift", "cozy-minimal").')
+  lines.push('Avoid emojis, hashtags, usernames, or platform-specific jargon. No private info.')
+  lines.push('Return STRICT JSON: { "summary": string, "tags": string[] }')
+  lines.push('Aim for 8-12 tags capturing style, use-cases, price/quality intent, materials, aesthetics, occasion, and audience.')
+  lines.push('Context:')
+  lines.push(`- Title: ${request.title}`)
+  lines.push(`- Description: ${request.description}`)
+  lines.push(`- Budget: ${request.budget}`)
+  if (request.occasion) lines.push(`- Occasion: ${request.occasion}`)
+  if (request.media?.text) lines.push(`- Media caption/text: ${request.media.text}`)
+  if (request.media?.type) lines.push(`- Media type: ${request.media.type}`)
+  if (request.media?.urls && request.media.urls.length > 0) {
+    lines.push(`- Media urls (reference only): ${(request.media.urls || []).join(', ')}`)
+  }
+  return lines.join('\n')
+}
+
+function localFallbackTags(request: ShoppingRequest): GeneratedTagsResult {
+  const baseText = `${request.title} ${request.description} ${request.media?.text || ''}`.toLowerCase()
+  const tags = Array.from(
+    new Set(
+      baseText
+        .replace(/[^a-z0-9\s-]/g, ' ')
+        .split(/\s+/)
+        .filter(Boolean)
+        .map(t => t.length > 18 ? t.slice(0, 18) : t)
+    )
+  )
+    .filter(t => t.length >= 3)
+    .slice(0, 10)
+  const summary = request.description.slice(0, 160)
+  return { summary, tags }
+}
+
+export async function generateRequestTags(request: ShoppingRequest, options?: { temperature?: number }): Promise<GeneratedTagsResult> {
+  const key = makeRequestTagsKey(request)
+  const cached = requestTagsCache.get(key)
+  if (cached) return cached
+
+  const prompt = buildTagsPrompt(request)
+  if (fal && typeof fal.run === 'function' && FAL_KEY) {
+    try {
+      // eslint-disable-next-line no-console
+      console.debug('[fal] calling model for request tags', { requestId: request.id })
+      const model = 'fal-ai/llama-3.1-8b-instruct'
+      const response: any = await fal.run(model, {
+        input: {
+          prompt,
+          temperature: options?.temperature ?? 0.4,
+        },
+      })
+      const raw = (response?.output_text ?? response?.response ?? '').toString()
+      const jsonMatch = raw.match(/\{[\s\S]*\}/)
+      const jsonText = jsonMatch ? jsonMatch[0] : raw
+      const parsed = JSON.parse(jsonText)
+      if (!parsed || !Array.isArray(parsed.tags)) {
+        // eslint-disable-next-line no-console
+        console.warn('[fal] invalid tags response; falling back')
+        const fallback = localFallbackTags(request)
+        requestTagsCache.set(key, fallback)
+        return fallback
+      }
+      const normalized = parsed.tags
+        .map((t: unknown) => String(t || '').toLowerCase().trim())
+        .filter(Boolean)
+        .map((t: string) => t.replace(/[^a-z0-9-]/g, '-'))
+        .map((t: string) => t.replace(/--+/g, '-'))
+        .map((t: string) => t.replace(/^-+|-+$/g, ''))
+        .filter((t: string) => t.length >= 2 && t.length <= 24)
+      const deduped: string[] = Array.from(new Set<string>(normalized))
+      const cleaned: GeneratedTagsResult = {
+        summary: String(parsed.summary || '').slice(0, 240),
+        tags: deduped.slice(0, 12),
+      }
+      // eslint-disable-next-line no-console
+      console.debug('[fal] tags model success', cleaned)
+      requestTagsCache.set(key, cleaned)
+      return cleaned
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[fal] model error (tags); falling back', err)
+      const fallback = localFallbackTags(request)
+      requestTagsCache.set(key, fallback)
+      return fallback
+    }
+  }
+  const fallback = localFallbackTags(request)
+  requestTagsCache.set(key, fallback)
+  return fallback
 }
 
 export async function getOrGenerateCartProfileCopy(

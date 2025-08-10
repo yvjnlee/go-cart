@@ -1,27 +1,21 @@
-import { storage, generateId } from './storage'
 import type { OrderRecord } from '../types'
+import { api } from './api'
+
+// Note: The backend does not expose an orders resource yet.
+// For now, we provide no-op implementations backed by the carts/products relations or return empty arrays.
 
 export const ordersService = {
-  async listByRequest(requestId: string): Promise<OrderRecord[]> {
-    const orders = (await storage.getOrders()) as OrderRecord[]
-    return orders.filter(o => o.requestId === requestId).sort((a, b) => (a.purchasedAt < b.purchasedAt ? 1 : -1))
+  async listByRequest(_requestId: string): Promise<OrderRecord[]> {
+    return []
   },
 
   async listAll(): Promise<OrderRecord[]> {
-    const orders = (await storage.getOrders()) as OrderRecord[]
-    return [...orders].sort((a, b) => (a.purchasedAt < b.purchasedAt ? 1 : -1))
+    return []
   },
 
   async add(input: Omit<OrderRecord, 'id' | 'purchasedAt'>): Promise<OrderRecord> {
-    const newOrder: OrderRecord = {
-      ...input,
-      id: generateId('order'),
-      purchasedAt: new Date().toISOString(),
-    }
-    const existing = (await storage.getOrders()) as OrderRecord[]
-    const updated = [newOrder, ...existing]
-    await storage.saveOrders(updated)
-    return newOrder
+    // Without a backend resource, we cannot persist orders. Throw to catch improper usage.
+    throw new Error('ordersService.add is not implemented: backend orders API not available')
   },
 }
 

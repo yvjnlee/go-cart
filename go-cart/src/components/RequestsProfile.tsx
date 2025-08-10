@@ -11,7 +11,12 @@ export default function RequestsProfile() {
   const [filter, setFilter] = useState<'all' | 'open' | 'closed'>('all')
 
   useEffect(() => {
-    requestsService.list().then(setRequests)
+    let cancelled = false
+    requestsService
+      .list()
+      .then(data => { if (!cancelled) setRequests(data) })
+      .catch(() => { if (!cancelled) setRequests([]) })
+    return () => { cancelled = true }
   }, [])
 
   // Per-request data is fetched in child overlay
@@ -74,7 +79,7 @@ export default function RequestsProfile() {
       {/* Tabs removed for a unified grid view */}
 
       {requests === null ? (
-        <div className="flex justify-center items-center h-[50vh]"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"/></div>
+        <div className="h-[50vh] flex items-center justify-center text-white/70">Loading…</div>
       ) : filtered && filtered.length > 0 ? (
         <RequestsGrid list={filtered} onSelect={setSelected} />
       ) : (

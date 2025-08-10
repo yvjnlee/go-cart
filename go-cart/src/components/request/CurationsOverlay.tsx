@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useCuratedProducts } from '@shopify/shop-minis-react'
 import type { CartItem, CartItemProductSnapshot, ShoppingRequest } from '../../types'
-import { curationService, type CuratedSection, type CuratedStore } from '../../services/curation.service'
+import { curationService } from '../../services/curation.service'
 
 interface Props {
   request: ShoppingRequest
@@ -11,39 +12,44 @@ interface Props {
 }
 
 export default function CurationsOverlay({ request, items, onAddItem, onRemoveItem, onClose }: Props) {
-  const [sections, setSections] = useState<CuratedSection[] | null>(null)
-  const [stores, setStores] = useState<CuratedStore[] | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
+  // Generate tags for request
+  const [tagsResult, setTagsResult] = useState<{ summary: string; tags: string[] } | null>(null)
+  const [tagsLoading, setTagsLoading] = useState<boolean>(true)
+  const [tagsError, setTagsError] = useState<string | null>(null)
   useEffect(() => {
     let cancelled = false
-    setLoading(true)
-    setError(null)
-    Promise.all([
-      curationService.getCuratedSections(request),
-      curationService.getCuratedStores(request),
-    ])
-      .then(([secs, sts]) => {
-        if (cancelled) return
-        setSections(secs)
-        setStores(sts)
-      })
-      .catch(err => { if (!cancelled) setError(err?.message || 'Failed to load curations') })
-      .finally(() => { if (!cancelled) setLoading(false) })
+    setTagsLoading(true)
+    setTagsError(null)
+    setTagsResult(null)
+    curationService.generateTagsForRequest(request)
+      .then(res => { if (!cancelled) setTagsResult(res) })
+      .catch(err => { if (!cancelled) setTagsError(err?.message || 'Failed to generate tags') })
+      .finally(() => { if (!cancelled) setTagsLoading(false) })
     return () => { cancelled = true }
   }, [request])
 
+  // Minis curated products
+  const { products: minisProducts, loading: minisLoading, error: minisError } = useCuratedProducts({
+    handle: request.id,
+    requiredTags: tagsResult?.tags,
+  } as any)
+
   const productSnapshots: CartItemProductSnapshot[] = useMemo(() => {
-    if (!sections) return []
-    const all = sections.flatMap(s => s.products)
+    const products = minisProducts ?? []
+    const mapped: CartItemProductSnapshot[] = products.map((p: any) => ({
+      id: String(p?.id ?? ''),
+      title: String(p?.title ?? ''),
+      imageUrl: p?.featuredImage?.url ?? undefined,
+      priceAmount: p?.price?.amount != null ? Number(p.price.amount) : undefined,
+      priceCurrencyCode: p?.price?.currencyCode ?? 'USD',
+    }))
     const seen = new Set<string>()
-    return all.filter(p => {
-      if (seen.has(p.id)) return false
+    return mapped.filter(p => {
+      if (!p.id || seen.has(p.id)) return false
       seen.add(p.id)
       return true
     })
-  }, [sections])
+  }, [minisProducts])
 
   function SimpleProductTile({ p, inCartIdx }: { p: CartItemProductSnapshot; inCartIdx: number }) {
     return (

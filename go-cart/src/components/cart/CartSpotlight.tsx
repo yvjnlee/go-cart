@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useCuratedProducts } from '@shopify/shop-minis-react'
 import type { CartItem, CartItemProductSnapshot, ShoppingRequest } from '../../types'
 import { getOrGenerateCartProfileCopy, getCachedCartProfileCopy, prefetchCartProfileCopy, type CartProfileCopy } from '../../services/fal.service'
-import { curationService, type CuratedSection } from '../../services/curation.service'
+import { curationService } from '../../services/curation.service'
 
 interface Props {
   request: ShoppingRequest
@@ -19,23 +20,54 @@ export default function CartSpotlight({ request, items, onAddItem, onRemoveItem,
   const [copy, setCopy] = useState<CartProfileCopy | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [curated, setCurated] = useState<CuratedSection[] | null>(null)
+  const [tagsResult, setTagsResult] = useState<{ summary: string; tags: string[] } | null>(null)
+  const [tagsLoading, setTagsLoading] = useState<boolean>(true)
+  const [tagsError, setTagsError] = useState<string | null>(null)
 
-  const moodboardProducts: CartItemProductSnapshot[] = useMemo(() => items.map(i => i.product), [items])
-  const baseProducts: CartItemProductSnapshot[] = useMemo(() => (
-    moodboardProducts.length > 0 ? moodboardProducts : (curated?.flatMap(s => s.products) ?? [])
-  ), [moodboardProducts, curated])
-
-  // Fetch curated products if moodboard empty so we can still generate a good spotlight
+  // Generate tags for request
   useEffect(() => {
     let cancelled = false
-    if (moodboardProducts.length === 0) {
-      curationService.getCuratedSections(request).then(res => { if (!cancelled) setCurated(res) })
-    } else {
-      setCurated(null)
-    }
+    setTagsLoading(true)
+    setTagsError(null)
+    setTagsResult(null)
+    curationService.generateTagsForRequest(request)
+      .then(res => { if (!cancelled) setTagsResult(res) })
+      .catch(err => { if (!cancelled) setTagsError(err?.message || 'Failed to generate tags') })
+      .finally(() => { if (!cancelled) setTagsLoading(false) })
     return () => { cancelled = true }
-  }, [request, moodboardProducts.length])
+  }, [request])
+
+  const moodboardProducts: CartItemProductSnapshot[] = useMemo(() => items.map(i => i.product), [items])
+
+  // Fetch curated products via Minis when moodboard is empty
+  const { products: minisProducts, loading: minisLoading, error: minisError } = useCuratedProducts({
+    handle: request.id,
+    requiredTags: tagsResult?.tags,
+    skip: moodboardProducts.length > 0,
+  } as any)
+
+  const fallbackProductsFromMinis: CartItemProductSnapshot[] = useMemo(() => {
+    const products = minisProducts ?? []
+    const mapped: CartItemProductSnapshot[] = products.map((p: any) => ({
+      id: String(p?.id ?? ''),
+      title: String(p?.title ?? ''),
+      imageUrl: p?.featuredImage?.url ?? undefined,
+      priceAmount: p?.price?.amount != null ? Number(p.price.amount) : undefined,
+      priceCurrencyCode: p?.price?.currencyCode ?? 'USD',
+    }))
+    const seen = new Set<string>()
+    return mapped.filter(p => {
+      if (!p.id || seen.has(p.id)) return false
+      seen.add(p.id)
+      return true
+    })
+  }, [minisProducts])
+
+  const baseProducts: CartItemProductSnapshot[] = useMemo(() => (
+    moodboardProducts.length > 0 ? moodboardProducts : fallbackProductsFromMinis
+  ), [moodboardProducts, fallbackProductsFromMinis])
+
+  const isOverlay = variant === 'overlay'
 
   useEffect(() => {
     let cancelled = false
@@ -63,7 +95,8 @@ export default function CartSpotlight({ request, items, onAddItem, onRemoveItem,
     return { inCart: idx >= 0, index: idx }
   }
 
-  const isOverlay = variant === 'overlay'
+  const productsLoading = moodboardProducts.length > 0 ? false : (minisLoading || tagsLoading)
+  const productsError = tagsError || (minisError as any)?.message || (minisError as any) || null
 
   return (
     <div className={isOverlay ? 'fixed inset-0 z-50' : 'w-full bg-white'}>
@@ -78,10 +111,10 @@ export default function CartSpotlight({ request, items, onAddItem, onRemoveItem,
           </div>
         ) : null}
 
-        {loading ? (
+        {loading || productsLoading ? (
           <div className="py-12 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"/></div>
-        ) : error ? (
-          <div className="p-4 text-sm text-red-600">{error}</div>
+        ) : error || productsError ? (
+          <div className="p-4 text-sm text-red-600">{error || productsError}</div>
         ) : copy ? (
           <div className="relative">
             <div className={isOverlay ? 'h-[calc(92vh-48px)] overflow-y-auto pb-6' : 'pb-6'}>
