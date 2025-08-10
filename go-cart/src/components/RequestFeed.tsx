@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { requestsService } from '../services/request.service'
-import type { CartItem, CartItemProductSnapshot, ShoppingRequest } from '../types'
+import { curationService, type CuratedSection, type CuratedStore } from '../services/curation.service'
+import type { CartItem, ShoppingRequest, CartItemProductSnapshot } from '../types'
 import { CartItemEditor } from './cart/CartItemEditor'
 import { CartItemList } from './cart/CartItemList'
 import { CartSubmitForm } from './cart/CartSubmitForm'
-import { curationService, type CuratedSection } from '../services/curation.service'
 
 export function RequestFeed() {
   const [requests, setRequests] = useState<ShoppingRequest[] | null>(null)
@@ -24,7 +24,7 @@ export function RequestFeed() {
 
   if (requests === null) {
     return (
-      <div className="flex justify-center items-center h-[70vh]">
+      <div className="flex justify-center items-center h-full">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
       </div>
     )
@@ -35,9 +35,9 @@ export function RequestFeed() {
   }
 
   return (
-    <div className="relative">
+    <div className="relative h-full">
       <div
-        className="h-[calc(100vh-6rem)] overflow-y-auto snap-y snap-mandatory"
+        className="h-full overflow-y-auto snap-y snap-mandatory"
         ref={scrollFeedRef}
         onScroll={() => {
           const el = scrollFeedRef.current
@@ -48,7 +48,7 @@ export function RequestFeed() {
         }}
       >
         {requests.map((req, i) => (
-          <div key={req.id} className="snap-start h-[calc(100vh-6rem)]">
+          <div key={req.id} className="snap-start h-full">
             <ReelCard
               request={req}
               isActive={i === activeIndex}
@@ -62,13 +62,12 @@ export function RequestFeed() {
       </div>
 
       {selectedRequest && showCurated ? (
-        <CuratedOverlay
+        <CurationsOverlay
           request={selectedRequest}
           items={items}
           onAddItem={it => setItems(prev => [...prev, it])}
           onRemoveItem={idx => setItems(prev => prev.filter((_, i) => i !== idx))}
           onClose={() => { setShowCurated(false); setSelectedRequest(null) }}
-          onProceedToSubmit={() => setShowCurated(false)}
         />
       ) : null}
 
@@ -94,7 +93,8 @@ function ReelCard({ request, isActive, onShop }: { request: ShoppingRequest; isA
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const videoRef = useRef<HTMLVideoElement | null>(null)
-  const [isPlaying, setIsPlaying] = useState(true)
+  // track muted state only; remove unused isPlaying
+  // (HUD visibility is handled by showHud)
   const [showHud, setShowHud] = useState(false)
   const hudHideTimeoutRef = useRef<number | null>(null)
   const [isMuted, setIsMuted] = useState(true)
@@ -119,15 +119,7 @@ function ReelCard({ request, isActive, onShop }: { request: ShoppingRequest; isA
     el.scrollTo({ left: containerWidth * index, behavior: 'smooth' })
   }
 
-  function togglePlay() {
-    const el = videoRef.current
-    if (!el) return
-    if (el.paused) {
-      el.play().catch(() => {})
-    } else {
-      el.pause()
-    }
-  }
+  // Remove unused togglePlay to satisfy the linter
 
   function toggleMute() {
     const el = videoRef.current
@@ -150,7 +142,6 @@ function ReelCard({ request, isActive, onShop }: { request: ShoppingRequest; isA
       if (!el.paused) {
         wasPlayingBeforeHoldRef.current = true
         el.pause()
-        setIsPlaying(false)
         showHudTemporarily()
       }
     }, 280)
@@ -211,6 +202,13 @@ function ReelCard({ request, isActive, onShop }: { request: ShoppingRequest; isA
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-black">
+      {isDescriptionExpanded ? (
+        <button
+          aria-label="Collapse description"
+          className="absolute inset-0 z-20 bg-transparent cursor-default"
+          onClick={() => setIsDescriptionExpanded(false)}
+        />
+      ) : null}
       {media ? (
         media.type === 'video' && media.urls?.[0] ? (
           <>
@@ -245,8 +243,8 @@ function ReelCard({ request, isActive, onShop }: { request: ShoppingRequest; isA
                 toggleMute();
                 showHudTemporarily()
               }}
-              onPlay={() => { setIsPlaying(true); showHudTemporarily() }}
-              onPause={() => { setIsPlaying(false); showHudTemporarily() }}
+              onPlay={() => { showHudTemporarily() }}
+              onPause={() => { showHudTemporarily() }}
             />
             <button
               aria-label={isMuted ? 'Unmute video' : 'Mute video'}
@@ -297,19 +295,27 @@ function ReelCard({ request, isActive, onShop }: { request: ShoppingRequest; isA
       )}
 
       <button
-        className="absolute bottom-28 left-1/2 -translate-x-1/2 z-10 px-4 py-2 rounded-full text-sm font-medium text-white bg-[#5A31F4] hover:bg-[#4E28D6]"
-        onClick={onShop}
+        className="absolute bottom-44 left-1/2 -translate-x-1/2 z-30 px-4 py-2 rounded-full text-sm font-medium text-white bg-[#5A31F4] hover:bg-[#4E28D6] pointer-events-auto"
+        onClick={() => {
+          if (isDescriptionExpanded) {
+            setIsDescriptionExpanded(false)
+            // Navigate after collapsing to feel responsive
+            setTimeout(() => onShop(), 0)
+          } else {
+            onShop()
+          }
+        }}
       >
-        Shop for them
+        Shop
       </button>
 
       {null}
 
       <div
-        className="absolute inset-x-0 bottom-0 z-10 p-4 bg-gradient-to-t from-black/70 via-black/40 to-transparent"
+        className="absolute inset-x-0 bottom-0 z-10 p-4 pb-8 bg-gradient-to-t from-black/70 via-black/40 to-transparent pointer-events-none"
       >
         {media?.type === 'image' && media.urls && media.urls.length > 1 ? (
-          <div className="mb-2 flex items-center justify-center gap-1.5" onClick={e => e.stopPropagation()}>
+          <div className="mb-2 flex items-center justify-center gap-1.5 pointer-events-auto" onClick={e => e.stopPropagation()}>
             {media.urls.map((_, i) => (
               <button
                 key={i}
@@ -322,9 +328,14 @@ function ReelCard({ request, isActive, onShop }: { request: ShoppingRequest; isA
         ) : null}
         <h3 className="text-white font-semibold text-base">{request.title}</h3>
         <div className="relative mt-1">
-          <p className={`text-white/95 text-sm ${isDescriptionExpanded ? 'line-clamp-none max-h-28 overflow-y-auto pr-28' : 'line-clamp-1 pr-24'}`}>{request.description}</p>
+          <p
+            className={`text-white/95 text-sm px-1 py-0.5 ${isDescriptionExpanded ? 'line-clamp-none max-h-32 overflow-y-auto pr-28' : 'line-clamp-1 pr-24'} pointer-events-auto`}
+            onClick={(e) => { e.stopPropagation(); setIsDescriptionExpanded(prev => !prev) }}
+          >
+            {request.description}
+          </p>
           <button
-            className="absolute right-0 top-0 text-xs font-medium text-white/90 underline decoration-white/60 hover:text-white"
+            className="absolute right-0 top-0 text-xs font-medium text-white/90 underline decoration-white/60 hover:text-white pointer-events-auto"
             onClick={(e) => { e.stopPropagation(); setIsDescriptionExpanded(prev => !prev) }}
           >
             {isDescriptionExpanded ? 'Show less' : 'Show more'}
@@ -386,109 +397,155 @@ function BuilderOverlay({
   )
 }
 
-function CuratedOverlay({
+// CuratedOverlay removed in favor of CartSpotlight
+
+function CurationsOverlay({
   request,
   items,
   onAddItem,
   onRemoveItem,
   onClose,
-  onProceedToSubmit,
 }: {
   request: ShoppingRequest
   items: CartItem[]
   onAddItem: (it: CartItem) => void
   onRemoveItem: (idx: number) => void
   onClose: () => void
-  onProceedToSubmit: () => void
 }) {
   const [sections, setSections] = useState<CuratedSection[] | null>(null)
-  const [stores, setStores] = useState<Awaited<ReturnType<typeof curationService.getCuratedStores>> | null>(null)
+  const [stores, setStores] = useState<CuratedStore[] | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    curationService.getCuratedSections(request).then(setSections)
-    curationService.getCuratedStores(request).then(setStores)
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    Promise.all([
+      curationService.getCuratedSections(request),
+      curationService.getCuratedStores(request),
+    ])
+      .then(([secs, sts]) => {
+        if (cancelled) return
+        setSections(secs)
+        setStores(sts)
+      })
+      .catch(err => { if (!cancelled) setError(err?.message || 'Failed to load curations') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
   }, [request])
 
-  function addProduct(product: CartItemProductSnapshot) {
-    onAddItem({ product, quantity: 1 })
+  // Build mixed feed of products and stores
+  const productSnapshots: CartItemProductSnapshot[] = useMemo(() => {
+    if (!sections) return []
+    const all = sections.flatMap(s => s.products)
+    const seen = new Set<string>()
+    return all.filter(p => {
+      if (seen.has(p.id)) return false
+      seen.add(p.id)
+      return true
+    })
+  }, [sections])
+
+  // Split layout: products grid and a separate stores row
+
+  function SimpleProductTile({ p, inCartIdx }: { p: CartItemProductSnapshot; inCartIdx: number }) {
+    return (
+      <div className="group relative rounded-xl overflow-hidden border border-gray-200 bg-white shadow-sm transition hover:shadow-md">
+        <div className="w-full bg-gray-100 aspect-[4/5]">
+          {p.imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={p.imageUrl} alt={p.title || 'Product'} className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full bg-gray-100" />
+          )}
+        </div>
+        <div className="p-3">
+          <div className="text-sm font-semibold text-gray-900 line-clamp-2">{p.title || p.id}</div>
+          <div className="mt-1 flex items-center justify-between gap-2">
+            <div className="text-[13px] text-gray-600">{p.priceCurrencyCode || 'USD'} {p.priceAmount ?? '-'}</div>
+            <div>
+              {inCartIdx >= 0 ? (
+                <button className="text-[11px] px-2 py-1 rounded-md border border-gray-300 bg-white/95 shadow-sm hover:bg-white" onClick={() => onRemoveItem(inCartIdx)}>Remove</button>
+              ) : (
+                <button className="text-[11px] px-2 py-1 rounded-md bg-[#5A31F4] text-white shadow-sm hover:bg-[#4E28D6]" onClick={() => onAddItem({ product: p, quantity: 1 })}>Add</button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  function SimpleStoreTile({ name, imageUrl }: { name: string; imageUrl?: string }) {
+    return (
+      <div className="rounded-xl overflow-hidden border border-gray-200 bg-white shadow-sm p-3 flex items-center gap-3">
+        <div className="h-10 w-10 rounded-full bg-gray-100 overflow-hidden flex items-center justify-center text-gray-400 text-sm">
+          {imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={imageUrl} alt={name} className="h-full w-full object-cover" />
+          ) : (
+            <span>{name.slice(0,1)}</span>
+          )}
+        </div>
+        <div>
+          <div className="text-sm font-semibold text-gray-900">{name}</div>
+          <div className="text-xs text-gray-600 mt-0.5">Store</div>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="absolute inset-x-0 bottom-0 bg-white rounded-t-2xl border-t border-gray-200 p-4 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-2">
+      <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl border-t border-gray-200 max-h-[92vh] overflow-y-auto">
+        <div className="p-4 border-b sticky top-0 bg-white z-10 flex items-center justify-between">
           <div>
             <h4 className="text-base font-semibold">Shop for “{request.title}”</h4>
-            <p className="text-xs text-gray-500">Curated, recommended and popular products</p>
+            <p className="text-xs text-gray-500">Budget ${request.budget}{request.occasion ? ` · ${request.occasion}` : ''}</p>
           </div>
           <button onClick={onClose} className="text-sm text-gray-600 hover:text-gray-800">Close</button>
         </div>
 
-        {sections === null ? (
-          <div className="py-12 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>
+        {loading ? (
+          <div className="py-12 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"/></div>
+        ) : error ? (
+          <div className="p-4 text-sm text-red-600">{error}</div>
         ) : (
-          <div className="space-y-6">
-            {stores && stores.length > 0 ? (
-              <div className="space-y-2">
-                <h5 className="text-sm font-medium text-gray-700">Stores</h5>
-                <ul className="flex gap-3 overflow-x-auto pb-1">
-                  {stores.map(s => (
-                    <li key={s.url} className="min-w-[180px] max-w-[220px] bg-white border border-gray-200 rounded-md overflow-hidden">
-                      <div className="aspect-[3/2] bg-gray-50 flex items-center justify-center">
-                        {s.imageUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={s.imageUrl} alt={s.name} className="h-full w-full object-contain p-6" />
-                        ) : (
-                          <div className="h-full w-full bg-gray-100" />
-                        )}
-                      </div>
-                      <div className="p-2 flex items-center justify-between gap-2">
-                        <p className="text-sm font-medium text-gray-800 truncate">{s.name}</p>
-                        <a className="text-xs px-2 py-1 rounded border border-gray-300 text-gray-700" href={s.url} target="_blank" rel="noreferrer">Open</a>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+          <div className="p-4 space-y-6">
+            {/* Stores row at top */}
+            <section>
+              <div className="mb-2 px-0.5">
+                <h5 className="text-sm font-semibold text-gray-900">Stores</h5>
               </div>
-            ) : null}
-            {sections.map((sec, i) => (
-              <div key={i} className="space-y-2">
-                <h5 className="text-sm font-medium text-gray-700">{sec.title}</h5>
-                <ul className="grid grid-cols-2 gap-3">
-                  {sec.products.map(p => (
-                    <li key={p.id} className="bg-white border border-gray-200 rounded-md overflow-hidden">
-                      <div className="aspect-square bg-gray-50 flex items-center justify-center">
-                        {p.imageUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={p.imageUrl} alt={p.title || 'Product'} className="h-full w-full object-cover" />
-                        ) : (
-                          <div className="h-full w-full bg-gray-100" />
-                        )}
-                      </div>
-                      <div className="p-2 space-y-2">
-                        <div>
-                          <p className="text-sm font-medium text-gray-800 truncate">{p.title || p.id}</p>
-                          <p className="text-xs text-gray-500">{p.priceCurrencyCode || 'USD'} {p.priceAmount ?? '-'}</p>
-                        </div>
-                        <div className="flex gap-2">
-                          <button className="px-3 py-1 rounded-md text-xs font-medium bg-green-600 text-white" onClick={() => addProduct(p)}>Add</button>
-                          <a className="px-3 py-1 rounded-md text-xs bg-white border border-gray-300 text-gray-700" href="#" onClick={e => e.preventDefault()}>View store</a>
-                        </div>
-                      </div>
-                    </li>
+              <div className="-mx-1 overflow-x-auto">
+                <div className="px-1 flex gap-3">
+                  {(stores ?? []).map((s, idx) => (
+                    <div key={`s-${idx}`} className="w-40 shrink-0">
+                      <SimpleStoreTile name={s.name} imageUrl={s.imageUrl} />
+                    </div>
                   ))}
-                </ul>
+                </div>
               </div>
-            ))}
+            </section>
 
-            <div className="space-y-3">
-              <h5 className="text-sm font-medium text-gray-700">Moodboard</h5>
-              <CartItemList items={items} onRemove={onRemoveItem} />
-              <div className="flex justify-end">
-                <button className="px-4 py-2 rounded-md text-sm font-medium bg-blue-600 text-white" onClick={onProceedToSubmit}>Proceed to submit</button>
+            {/* Products grid */}
+            <section>
+              <div className="mb-2 px-0.5">
+                <h5 className="text-sm font-semibold text-gray-900">Products</h5>
               </div>
-            </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {productSnapshots.map((p, idx) => {
+                  const inCartIdx = items.findIndex(it => it.product.id === p.id)
+                  return (
+                    <div key={`p-${idx}`} className="relative">
+                      <SimpleProductTile p={p} inCartIdx={inCartIdx} />
+                    </div>
+                  )
+                })}
+              </div>
+            </section>
           </div>
         )}
       </div>

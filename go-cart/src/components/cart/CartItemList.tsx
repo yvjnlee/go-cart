@@ -28,9 +28,15 @@ export function CartItemList({ items, onRemove }: Props) {
           </div>
           <button
             onClick={() => onRemove(idx)}
-            className="absolute top-2 right-2 text-xs bg-white/80 border border-gray-200 rounded px-2 py-1 text-red-600 hover:bg-white"
+            aria-label="Remove"
+            title="Remove"
+            className="absolute top-2 right-2 h-8 w-8 flex items-center justify-center bg-white/90 border border-gray-200 rounded-full text-red-600 hover:bg-white shadow-sm"
           >
-            Remove
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M9 3a1 1 0 00-1 1v1H5v2h14V5h-3V4a1 1 0 00-1-1H9zm1 2h4V4h-4v1z" />
+              <path d="M7 9h2v9H7V9zm4 0h2v9h-2V9zm4 0h2v9h-2V9z" />
+              <path d="M6 7h12v2H6V7z" fill="none" />
+            </svg>
           </button>
         </li>
       ))}

@@ -40,4 +40,11 @@ export interface SubmittedCart {
   submittedAt: string
 }
 
+export interface OrderRecord {
+  id: string
+  requestId: string
+  items: CartItem[]
+  purchasedAt: string
+}
+
 
