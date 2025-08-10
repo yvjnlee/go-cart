@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Shopify Minis API", 
+    title="Crowd Cart API", 
     version="1.0.0",
     lifespan=lifespan
 )
@@ -47,7 +47,6 @@ async def root():
     return {
         "message": "Shopify Minis API", 
         "version": "1.0.0",
-        "database_url": os.getenv("DATABASE_URL", "postgresql://localhost:5432/shopify_minis"),
         "docs": "/docs"
     }
 
