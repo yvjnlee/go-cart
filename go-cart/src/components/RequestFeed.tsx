@@ -348,21 +348,9 @@ function ReelCard({
         </div>
       )}
 
-      <button
-        className="absolute bottom-44 left-1/2 -translate-x-1/2 z-30 px-4 py-2 rounded-full text-sm font-medium text-white bg-[#5A31F4] hover:bg-[#4E28D6] pointer-events-auto"
-        onClick={() => {
-          if (isDescriptionExpanded) {
-            setIsDescriptionExpanded(false);
-            setTimeout(() => onShop(), 0);
-          } else {
-            onShop();
-          }
-        }}
-      >
-        Shop
-      </button>
 
-      <div className="absolute inset-x-0 bottom-0 z-10 p-4 pb-8 bg-gradient-to-t from-black/70 via-black/40 to-transparent pointer-events-none">
+
+      <div className="absolute inset-x-0 bottom-0 z-10 p-6 pb-20 bg-gradient-to-t from-black/70 via-black/40 to-transparent pointer-events-none">
         {media?.type === "image" && media.urls && media.urls.length > 1 ? (
           <div
             className="mb-2 flex items-center justify-center gap-1.5 pointer-events-auto"
@@ -405,9 +393,24 @@ function ReelCard({
             {isDescriptionExpanded ? "Show less" : "Show more"}
           </button>
         </div>
-        <div className="text-white/90 text-xs mt-1">
-          Budget: ${request.budget}
-          {request.occasion ? ` · ${request.occasion}` : ""}
+        <div className="flex items-center justify-between mt-1">
+          <div className="text-white/90 text-xs">
+            Budget: <span className="text-white font-bold text-sm bg-green-500 px-2 py-0.5 rounded-full">${request.budget}</span>
+            {request.occasion ? ` · ${request.occasion}` : ""}
+          </div>
+          <button
+            className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-[#5A31F4] hover:bg-[#4E28D6] shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105 pointer-events-auto"
+            onClick={() => {
+              if (isDescriptionExpanded) {
+                setIsDescriptionExpanded(false);
+                setTimeout(() => onShop(), 0);
+              } else {
+                onShop();
+              }
+            }}
+          >
+            Shop for them
+          </button>
         </div>
       </div>
     </div>
