@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.database import create_tables
 from app.routers import requests, carts, products, cart_products, request_tags, request_assets
@@ -30,7 +31,17 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Crowd Cart API", 
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
+    debug=True,
+)
+
+# Allow CORS for local development (Vite dev server, etc.)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Include routers

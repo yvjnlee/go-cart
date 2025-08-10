@@ -9,14 +9,12 @@ from app.database import get_db
 
 
 REQUIRED_ENV_VARS = [
-    "R2_ENDPOINT_URL",
-    "R2_ACCESS_KEY_ID",
-    "R2_SECRET_ACCESS_KEY",
-    "R2_BUCKET_NAME",
+    "SHOPIFY_STORE_DOMAIN",
+    "SHOPIFY_ADMIN_ACCESS_TOKEN",
 ]
 
 
-def _r2_env_available() -> bool:
+def _shopify_env_available() -> bool:
     return all(os.getenv(k) for k in REQUIRED_ENV_VARS)
 
 
@@ -60,9 +58,9 @@ class FakeDB:
 
 
 @pytest.mark.integration
-@pytest.mark.skipif(not _r2_env_available(), reason="R2 env vars not set; integration test requires real R2")
+@pytest.mark.skipif(not _shopify_env_available(), reason="Shopify env vars not set; integration test requires real Shopify store")
 @pytest.mark.asyncio
-async def test_real_r2_upload_and_delete():
+async def test_real_shopify_upload_and_delete():
     # Use real R2 service; only override DB
     fake_db = FakeDB()
     request_id = str(uuid.uuid4())
@@ -89,8 +87,8 @@ async def test_real_r2_upload_and_delete():
             assert resp.status_code == 200
             body = resp.json()
             assert body["request_id"] == request_id
-            assert "request-assets/" in body["url"]
-            assert body["url"].split("?")[0].endswith(".txt")
+            # URL should be a Shopify CDN url
+            assert body["url"].startswith("https://")
 
             # Cleanup: delete from API (which should delete from R2)
             request_asset_id = body["request_asset_id"]
