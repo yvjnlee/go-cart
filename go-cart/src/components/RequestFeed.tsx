@@ -41,7 +41,12 @@ export function RequestFeed() {
   }, [selectedRequest?.id]);
 
   if (requests === null) {
-    return <div className="text-center py-12 text-gray-500">Loading…</div>;
+    return (
+      <div className="flex justify-center items-center h-[70vh]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <p className="ml-2 text-white">Loading requests...</p>
+      </div>
+    )
   }
 
   if (requests.length === 0) {
@@ -448,9 +453,9 @@ function BuilderOverlay({
 
   return (
     <div className="fixed inset-0 z-50">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl border-t border-gray-200 p-4 max-h-[85vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-2">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-2xl p-6 max-h-[85vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
           <div>
             <h4 className="text-base font-semibold">
               Curate for “{request.title}”
@@ -841,7 +846,7 @@ function CurationsOverlay({
                           ) : null}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium text-gray-900 truncate">{it.product.title || it.product.id}</div>
+                          <div className="text-sm font-medium text-gray-900 truncate">{it.product.title || 'Product'}</div>
                           <div className="text-xs text-gray-600">{it.product.priceCurrencyCode || 'USD'} {it.product.priceAmount ?? '-'}</div>
                         </div>
                         <button className="text-[11px] px-2 py-1 rounded-md border border-gray-300 bg-white" onClick={() => onRemoveItem(idx)}>Remove</button>

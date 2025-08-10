@@ -8,6 +8,8 @@ type AppView = 'feed' | 'shoppingRequests'
 export function App() {
   const [currentView, setCurrentView] = useState<AppView>('feed')
 
+  console.log('App render - currentView:', currentView)
+
   return (
     <div className="h-screen w-screen overflow-hidden relative bg-black">
       <NavBar current={currentView} onNavigate={setCurrentView} />

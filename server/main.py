@@ -17,6 +17,11 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
+# Basic logging configuration
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -38,21 +43,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(
-    title="Crowd Cart API",
-    version="1.0.0",
-    lifespan=lifespan,
-    debug=True,
-)
-
-# Allow CORS for local development (Vite dev server, etc.)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app = FastAPI(title="Crowd Cart API", version="1.0.0", lifespan=lifespan)
 
 # Include routers
 app.include_router(requests.router)

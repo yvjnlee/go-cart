@@ -1,1 +1,160 @@
 @import "@shopify/shop-minis-react/styles";
+
+/* Shop App Mini Enhanced Styles */
+@import 'tailwindcss';
+
+/* Custom line clamp utilities */
+.line-clamp-1 {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+}
+
+.line-clamp-2 {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* Smooth scrolling for better UX */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Enhanced focus styles for accessibility */
+*:focus {
+  outline: 2px solid #5A31F4;
+  outline-offset: 2px;
+}
+
+/* Custom gradient backgrounds */
+.gradient-purple {
+  background: linear-gradient(135deg, #5A31F4 0%, #6E3AFF 100%);
+}
+
+.gradient-purple-hover {
+  background: linear-gradient(135deg, #4E28D6 0%, #5E2FD1 100%);
+}
+
+/* Enhanced backdrop blur for better Glass morphism */
+.backdrop-blur-enhanced {
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+}
+
+/* Custom animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes shake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-1px);
+  }
+  75% {
+    transform: translateX(1px);
+  }
+}
+
+.animate-fadeInUp {
+  animation: fadeInUp 0.4s ease-out;
+}
+
+.animate-scaleIn {
+  animation: scaleIn 0.3s ease-out;
+}
+
+.animate-shake {
+  animation: shake 0.5s ease-in-out infinite;
+}
+
+/* Enhanced shadows */
+.shadow-soft {
+  box-shadow: 0 2px 15px -3px rgba(0, 0, 0, 0.07), 0 10px 20px -2px rgba(0, 0, 0, 0.04);
+}
+
+.shadow-medium {
+  box-shadow: 0 4px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 20px -5px rgba(0, 0, 0, 0.04);
+}
+
+.shadow-purple {
+  box-shadow: 0 10px 25px -5px rgba(90, 49, 244, 0.3), 0 10px 20px -5px rgba(110, 58, 255, 0.2);
+}
+
+/* Better text rendering */
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Custom scrollbar for webkit browsers */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.5);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 163, 175, 0.8);
+}
+
+/* Enhanced button hover states */
+.btn-primary {
+  @apply bg-gradient-to-r from-[#5A31F4] to-[#6E3AFF] text-white font-semibold rounded-full px-6 py-3 shadow-lg transition-all duration-200 hover:from-[#4E28D6] hover:to-[#5E2FD1] hover:shadow-xl hover:scale-105 focus:ring-2 focus:ring-[#5A31F4]/20;
+}
+
+.btn-secondary {
+  @apply bg-white text-gray-700 font-medium rounded-full px-6 py-3 border border-gray-300 shadow-sm transition-all duration-200 hover:bg-gray-50 hover:border-gray-400 hover:shadow-md focus:ring-2 focus:ring-gray-200;
+}
+
+/* Card hover effects */
+.card-hover {
+  @apply transition-all duration-200 hover:shadow-lg hover:scale-[1.02] hover:-translate-y-1;
+}
+
+/* Glass morphism effects */
+.glass {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.glass-dark {
+  background: rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}

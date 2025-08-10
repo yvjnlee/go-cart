@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ProductCard, useProduct, useProductSearch } from '@shopify/shop-minis-react'
+import { useProduct, useProductSearch } from '@shopify/shop-minis-react'
 import type { CartItem, CartItemProductSnapshot, ShoppingRequest } from '../../types'
 import { getOrGenerateCartProfileCopy, getCachedCartProfileCopy, prefetchCartProfileCopy, type CartProfileCopy, generateProductSearchQuery } from '../../services/fal.service'
 // curationService no longer needed for tags in this component
@@ -66,6 +66,37 @@ export default function CartSpotlight({ request, items, onAddItem, onRemoveItem,
   ), [moodboardProducts, fallbackProductsFromMinis])
 
   const isOverlay = variant === 'overlay'
+
+  function formatPrice(amount?: number, currencyCode?: string): string | null {
+    if (amount == null) return null
+    try {
+      return new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: currencyCode || 'USD',
+        maximumFractionDigits: 0,
+      }).format(amount)
+    } catch {
+      return `${currencyCode || 'USD'} ${amount}`
+    }
+  }
+
+  function sanitizeTagline(text?: string): string | null {
+    if (!text) return null
+    // Remove URLs and Shopify GIDs completely
+    let cleaned = text
+      .replace(/gid:\/\/shopify\/[\w/:-]+/gi, '')
+      .replace(/https?:\/\/\S+/gi, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim()
+
+    // If it's identical to a bare ID-looking token, drop it
+    if (!cleaned || /^(?:[A-Za-z0-9_\-]{10,}|gid:\/\/shopify)/i.test(cleaned)) {
+      return null
+    }
+    // Require at least one letter word to avoid showing junk
+    if (!/[A-Za-z]/.test(cleaned)) return null
+    return cleaned
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -145,8 +176,10 @@ export default function CartSpotlight({ request, items, onAddItem, onRemoveItem,
               <section className="p-4 space-y-6 pb-28">
                 {baseProducts.map(p => {
                   const { inCart, index } = isInCart(p.id)
+                  const priceText = formatPrice(p.priceAmount, p.priceCurrencyCode)
+                  const tagline = sanitizeTagline(copy.productTaglines[p.id])
                   return (
-                    <article key={p.id} className="mx-auto w-full max-w-2xl bg-white border rounded-2xl overflow-hidden shadow-sm">
+                    <article key={p.id} className="mx-auto w-full max-w-2xl bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm transition hover:shadow-md">
                       {!isOverlay ? (
                         <EmbeddedProduct productId={p.id} fallback={
                           <div className="w-full bg-gray-100">
@@ -168,17 +201,21 @@ export default function CartSpotlight({ request, items, onAddItem, onRemoveItem,
                       )}
                       <div className="p-4">
                         <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <div className="text-base font-semibold">{p.title || p.id}</div>
-                            <div className="text-sm text-gray-600">{p.priceCurrencyCode || 'USD'} {p.priceAmount ?? '-'}</div>
+                          <div className="min-w-0">
+                            <div className="text-base font-semibold text-gray-900 truncate">{p.title || 'Product'}</div>
+                            {priceText ? (
+                              <div className="text-sm text-gray-600">{priceText}</div>
+                            ) : null}
                           </div>
                           {inCart ? (
-                            <button className="text-xs px-3 py-1.5 rounded-md border border-gray-300 text-gray-700" onClick={() => onRemoveItem(index)}>Remove</button>
+                            <button className="text-xs px-3 py-1.5 rounded-full border border-gray-300 text-gray-700 bg-white hover:bg-gray-50" onClick={() => onRemoveItem(index)}>Remove</button>
                           ) : (
-                            <button className="text-xs px-3 py-1.5 rounded-md bg-[#5A31F4] text-white" onClick={() => onAddItem({ product: p, quantity: 1 })}>Add</button>
+                            <button className="text-xs px-3 py-1.5 rounded-full bg-[#5A31F4] text-white shadow-sm hover:bg-[#4E28D6]" onClick={() => onAddItem({ product: p, quantity: 1 })}>Add</button>
                           )}
                         </div>
-                        <div className="mt-3 text-[13px] text-gray-900">{copy.productTaglines[p.id]}</div>
+                        {tagline ? (
+                          <div className="mt-3 text-[13px] text-gray-800 leading-6 line-clamp-3">{tagline}</div>
+                        ) : null}
                       </div>
                     </article>
                   )
@@ -199,9 +236,14 @@ function EmbeddedProduct({ productId, fallback }: { productId: string; fallback?
   const { product, loading } = useProduct({ id: productId } as any)
   if (loading && fallback) return fallback
   if (!product) return fallback ?? null
+  const imgUrl = (product as any)?.featuredImage?.url as string | undefined
   return (
-    <div className="w-full">
-      <ProductCard product={product as any} />
+    <div className="w-full bg-gray-100">
+      {imgUrl ? (
+        <img src={imgUrl} alt={(product as any)?.title || 'Product'} className="w-full h-[280px] sm:h-[360px] object-cover" />
+      ) : (
+        <div className="w-full h-[280px] sm:h-[360px] bg-gray-100" />
+      )}
     </div>
   )
 }

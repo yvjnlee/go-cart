@@ -64,7 +64,7 @@ export default function CurationsOverlay({ request, items, onAddItem, onRemoveIt
           )}
         </div>
         <div className="p-3">
-          <div className="text-sm font-semibold text-gray-900 line-clamp-2">{p.title || p.id}</div>
+          <div className="text-sm font-semibold text-gray-900 line-clamp-2">{p.title || 'Product'}</div>
           <div className="mt-1 flex items-center justify-between gap-2">
             <div className="text-[13px] text-gray-600">{p.priceCurrencyCode || 'USD'} {p.priceAmount ?? '-'}</div>
             <div>

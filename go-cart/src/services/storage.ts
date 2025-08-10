@@ -1,4 +1,4 @@
-// Simple async wrappers to mimic persistence. Replace with backend calls later.
+// Simple async wrappers to mimic persistence. Replace with  backendcalls later.
 
 const REQUESTS_KEY = 'gc.shoppingRequests'
 const CARTS_KEY = 'gc.submittedCarts'

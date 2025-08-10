@@ -23,7 +23,7 @@ export function CartItemList({ items, onRemove }: Props) {
             )}
           </div>
           <div className="p-2">
-            <p className="text-sm font-medium text-gray-800 truncate">{it.product.title || it.product.id}</p>
+            <p className="text-sm font-medium text-gray-800 truncate">{it.product.title || 'Product'}</p>
             <p className="text-xs text-gray-500">Qty {it.quantity} · {it.product.priceCurrencyCode || 'USD'} {it.product.priceAmount ?? '-'}</p>
           </div>
           <button
