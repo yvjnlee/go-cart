@@ -1,4 +1,6 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+import logging
 from contextlib import asynccontextmanager
 from app.database import create_tables
 from app.routers import requests, carts, products, cart_products, request_tags, request_assets
@@ -8,6 +10,9 @@ from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
+
+# Basic logging configuration
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 
 @asynccontextmanager
@@ -31,6 +36,22 @@ app = FastAPI(
     title="Crowd Cart API", 
     version="1.0.0",
     lifespan=lifespan
+)
+
+# CORS for local development
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:4173",  # vite preview
+        "http://127.0.0.1:4173",
+        "http://0.0.0.0:5173",
+        "http://0.0.0.0:4173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Include routers
