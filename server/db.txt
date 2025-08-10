@@ -1,0 +1,31 @@
+requests:
+    request_id, shopify_user_id, query, created_at, updated_at
+    PRIMARY KEY (request_id)
+
+request_assets:
+    request_asset_id, request_id, url, created_at, updated_at
+    PRIMARY KEY (request_asset_id)
+    FOREIGN KEY (request_id) REFERENCES requests(request_id) ON DELETE CASCADE
+
+carts:
+    cart_id, request_id, shopify_user_id, created_at, updated_at
+    PRIMARY KEY (cart_id)
+    FOREIGN KEY (request_id) REFERENCES requests(request_id) ON DELETE CASCADE
+
+carts_products:
+    cart_id, product_id, created_at, updated_at
+    PRIMARY KEY (cart_id, product_id)
+    FOREIGN KEY (cart_id) REFERENCES carts(cart_id) ON DELETE CASCADE
+    FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE CASCADE
+
+products:
+    product_id, shopify_product_id, shopify_variant_id
+    PRIMARY KEY (product_id)
+
+request_tags:
+    tag_value, request_id, created_at, updated_at
+    PRIMARY KEY (tag_value, request_id)
+    FOREIGN KEY (request_id) REFERENCES requests(request_id) ON DELETE CASCADE
+
+Do not create shopify_product_id and shopify_variant_id. They can be provided by the client in the request when needed.
+shopify_product_id and shopify_variant_id are the strings, use varchar(255) for them.
