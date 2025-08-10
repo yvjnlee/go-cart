@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.database import create_tables
 from app.routers import (
@@ -41,13 +42,14 @@ app = FastAPI(
     title="Crowd Cart API",
     version="1.0.0",
     lifespan=lifespan,
+    debug=True,
 )
 
-# Enable CORS for local development and simulators
+# Allow CORS for local development (Vite dev server, etc.)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # For development; restrict in production
-    allow_credentials=False,
+    allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -32,7 +32,7 @@ async def create_tables():
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        
+
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS products (
                 product_id VARCHAR(255) PRIMARY KEY,
@@ -40,7 +40,7 @@ async def create_tables():
                 shopify_variant_id VARCHAR(255) NOT NULL
             )
         """)
-        
+
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS carts (
                 cart_id VARCHAR(255) PRIMARY KEY,
@@ -51,7 +51,7 @@ async def create_tables():
                 FOREIGN KEY (request_id) REFERENCES requests(request_id) ON DELETE CASCADE
             )
         """)
-        
+
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS carts_products (
                 cart_id VARCHAR(255),
@@ -63,7 +63,7 @@ async def create_tables():
                 FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE CASCADE
             )
         """)
-        
+
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS request_assets (
                 request_asset_id VARCHAR(255) PRIMARY KEY,
@@ -74,7 +74,7 @@ async def create_tables():
                 FOREIGN KEY (request_id) REFERENCES requests(request_id) ON DELETE CASCADE
             )
         """)
-        
+
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS request_tags (
                 tag_value VARCHAR(255),
@@ -85,6 +85,6 @@ async def create_tables():
                 FOREIGN KEY (request_id) REFERENCES requests(request_id) ON DELETE CASCADE
             )
         """)
-        
+
     finally:
         await conn.close()

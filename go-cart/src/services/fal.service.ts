@@ -217,6 +217,64 @@ export async function generateRequestTags(request: ShoppingRequest, options?: { 
   return fallback
 }
 
+function buildSearchPrompt(request: ShoppingRequest): string {
+  const lines: string[] = []
+  lines.push('You are an expert retail merchandiser. Create a concise ecommerce search query string for finding products that fit the brief below.')
+  lines.push('Return ONLY the query text, no JSON, no quotes.')
+  lines.push('Keep under 10 words. Prefer specific attributes, materials, styles, occasions, and budget hints.')
+  lines.push('Avoid brand names unless explicitly provided. Use simple separators like commas.')
+  lines.push('Brief:')
+  lines.push(`- Title: ${request.title}`)
+  lines.push(`- Description: ${request.description}`)
+  if (request.occasion) lines.push(`- Occasion: ${request.occasion}`)
+  if (request.budget) lines.push(`- Budget: ~$${request.budget}`)
+  if (request.media?.text) lines.push(`- Media caption/text: ${request.media.text}`)
+  return lines.join('\n')
+}
+
+function localFallbackSearchQuery(request: ShoppingRequest): string {
+  const base = `${request.title} ${request.description} ${request.media?.text || ''}`
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+  const keywords = Array.from(new Set(base))
+    .filter((w) => w.length >= 3)
+    .slice(0, 8)
+  const parts: string[] = []
+  if (request.occasion) parts.push(request.occasion.toLowerCase())
+  if (request.budget) parts.push(`under $${request.budget}`)
+  parts.push(...keywords)
+  return parts.slice(0, 10).join(', ')
+}
+
+export async function generateProductSearchQuery(
+  request: ShoppingRequest,
+  options?: { temperature?: number }
+): Promise<string> {
+  const prompt = buildSearchPrompt(request)
+  if (fal && typeof fal.run === 'function' && FAL_KEY) {
+    try {
+      // eslint-disable-next-line no-console
+      console.debug('[fal] calling model for product search query', { requestId: request.id })
+      const model = 'fal-ai/llama-3.1-8b-instruct'
+      const response: any = await fal.run(model, {
+        input: {
+          prompt,
+          temperature: options?.temperature ?? 0.3,
+        },
+      })
+      const raw = (response?.output_text ?? response?.response ?? '').toString().trim()
+      const oneLine = raw.replace(/\s+/g, ' ').replace(/^"|"$/g, '')
+      if (oneLine.length > 0) return oneLine.slice(0, 200)
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[fal] query model error; falling back', err)
+    }
+  }
+  return localFallbackSearchQuery(request)
+}
+
 export async function getOrGenerateCartProfileCopy(
   request: ShoppingRequest,
   products: CartItemProductSnapshot[],

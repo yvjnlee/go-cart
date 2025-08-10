@@ -1,11 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useCuratedProducts, useProductSearch, useRecommendedProducts, usePopularProducts, useRecentProducts, ProductCard } from "@shopify/shop-minis-react";
+import {
+  useProductSearch,
+  useRecommendedProducts,
+  usePopularProducts,
+  useRecentProducts,
+  ProductCard,
+} from "@shopify/shop-minis-react";
 import { requestsService } from "../services/request.service";
 import { curationService } from "../services/curation.service";
+import { generateProductSearchQuery } from "../services/fal.service";
 import type {
   CartItem,
   ShoppingRequest,
   CartItemProductSnapshot,
+  SubmittedCart,
 } from "../types";
 import { CartItemEditor } from "./cart/CartItemEditor";
 import { CartItemList } from "./cart/CartItemList";
@@ -33,7 +41,7 @@ export function RequestFeed() {
   }, [selectedRequest?.id]);
 
   if (requests === null) {
-    return <div className="text-center py-12 text-gray-500">Loading…</div>
+    return <div className="text-center py-12 text-gray-500">Loading…</div>;
   }
 
   if (requests.length === 0) {
@@ -42,10 +50,12 @@ export function RequestFeed() {
         <div className="text-center text-white/85 px-6">
           <div className="text-3xl mb-2">🕰️</div>
           <div className="text-lg font-semibold">Nothing to see yet</div>
-          <div className="text-sm text-white/70 mt-1">No posts are live right now — come back later.</div>
+          <div className="text-sm text-white/70 mt-1">
+            No posts are live right now — come back later.
+          </div>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -122,8 +132,8 @@ function ReelCard({
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  // track muted state only; remove unused isPlaying
-  // (HUD visibility is handled by showHud)
+
+  // HUD and gesture state
   const [showHud, setShowHud] = useState(false);
   const hudHideTimeoutRef = useRef<number | null>(null);
   const [isMuted, setIsMuted] = useState(true);
@@ -148,8 +158,6 @@ function ReelCard({
     el.scrollTo({ left: containerWidth * index, behavior: "smooth" });
   }
 
-  // Remove unused togglePlay to satisfy the linter
-
   function toggleMute() {
     const el = videoRef.current;
     if (!el) return;
@@ -159,7 +167,6 @@ function ReelCard({
   }
 
   function onPointerDown() {
-    // Start a short delay before engaging hold-to-pause to avoid jank on quick taps
     if (holdTimeoutRef.current) window.clearTimeout(holdTimeoutRef.current);
     isHoldingRef.current = false;
     wasPlayingBeforeHoldRef.current = false;
@@ -176,10 +183,7 @@ function ReelCard({
     }, 280);
   }
 
-  function endHold(e?: {
-    preventDefault?: () => void;
-    stopPropagation?: () => void;
-  }) {
+  function endHold(e?: { preventDefault?: () => void; stopPropagation?: () => void }) {
     if (holdTimeoutRef.current) {
       window.clearTimeout(holdTimeoutRef.current);
       holdTimeoutRef.current = null;
@@ -187,7 +191,6 @@ function ReelCard({
     const el = videoRef.current;
     if (!el) return;
     if (isHoldingRef.current) {
-      // Prevent the subsequent synthetic click from a long press
       suppressClickUntilRef.current = Date.now() + 500;
       if (e?.preventDefault) e.preventDefault();
       if (e?.stopPropagation) e.stopPropagation();
@@ -196,7 +199,6 @@ function ReelCard({
       }
       isHoldingRef.current = false;
       wasPlayingBeforeHoldRef.current = false;
-      // Keep boolean suppression until the time-based window expires
     }
   }
 
@@ -253,7 +255,6 @@ function ReelCard({
               muted={isMuted}
               playsInline
               controls={false}
-              // Prevent long-press menu and accidental selections
               onContextMenu={(e) => e.preventDefault()}
               style={{
                 WebkitTouchCallout: "none",
@@ -276,7 +277,6 @@ function ReelCard({
                   suppressNextClickRef.current ||
                   now < suppressClickUntilRef.current
                 ) {
-                  // Suppress click triggered by a hold interaction
                   suppressNextClickRef.current = false;
                   return;
                 }
@@ -301,47 +301,15 @@ function ReelCard({
               }}
             >
               {isMuted ? (
-                // Muted icon (speaker off)
-                <svg
-                  aria-hidden="true"
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                >
+                <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M3 10v4h4l5 5V5L7 10H3z"></path>
-                  <path
-                    d="M16 8l5 5m0-5l-5 5"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    fill="none"
-                    strokeLinecap="round"
-                  />
+                  <path d="M16 8l5 5m0-5l-5 5" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" />
                 </svg>
               ) : (
-                // Unmuted icon (speaker on)
-                <svg
-                  aria-hidden="true"
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                >
+                <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M3 10v4h4l5 5V5L7 10H3z"></path>
-                  <path
-                    d="M16.5 8.5a5 5 0 010 7"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    fill="none"
-                    strokeLinecap="round"
-                  />
-                  <path
-                    d="M18.5 6.5a8 8 0 010 11"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    fill="none"
-                    strokeLinecap="round"
-                  />
+                  <path d="M16.5 8.5a5 5 0 010 7" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" />
+                  <path d="M18.5 6.5a8 8 0 010 11" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" />
                 </svg>
               )}
             </button>
@@ -380,7 +348,6 @@ function ReelCard({
         onClick={() => {
           if (isDescriptionExpanded) {
             setIsDescriptionExpanded(false);
-            // Navigate after collapsing to feel responsive
             setTimeout(() => onShop(), 0);
           } else {
             onShop();
@@ -389,8 +356,6 @@ function ReelCard({
       >
         Shop
       </button>
-
-      {null}
 
       <div className="absolute inset-x-0 bottom-0 z-10 p-4 pb-8 bg-gradient-to-t from-black/70 via-black/40 to-transparent pointer-events-none">
         {media?.type === "image" && media.urls && media.urls.length > 1 ? (
@@ -440,8 +405,6 @@ function ReelCard({
           {request.occasion ? ` · ${request.occasion}` : ""}
         </div>
       </div>
-
-      {null}
     </div>
   );
 }
@@ -565,18 +528,23 @@ function CurationsOverlay({
     };
   }, [request]);
 
-  // Use official Shopify Minis hook for curated products
+  // AI query + Minis product search (default feed when not actively typing)
+  const [aiQuery, setAiQuery] = useState('');
+  useEffect(() => {
+    let cancelled = false;
+    generateProductSearchQuery(request).then((q) => { if (!cancelled) setAiQuery(q); });
+    return () => { cancelled = true };
+  }, [request]);
   const {
-    products: minisProducts,
-    loading: minisLoading,
-    error: minisError,
-    hasNextPage: curatedHasNext,
-    fetchMore: curatedFetchMore,
-  } = useCuratedProducts({
-    handle: request.id || 'request',
-    // Use top tags as required, rest as anyOf to broaden results
-    requiredTags: (tagsResult?.tags || []).slice(0, 2),
-    anyOfTags: (tagsResult?.tags || []).slice(2, 12),
+    products: aiProducts,
+    loading: aiLoading,
+    error: aiError,
+    hasNextPage: aiHasNext,
+    fetchMore: aiFetchMore,
+  } = useProductSearch({
+    query: aiQuery,
+    handle: request.id,
+    skip: !aiQuery,
   } as any);
 
   // Recommended and Popular as secondary fallbacks
@@ -623,14 +591,14 @@ function CurationsOverlay({
       fetchMore = searchFetchMore as any
       loading = searchLoading
       error = (searchError as any)?.message || (searchError as any) || null
-    } else if (minisProducts && minisProducts.length > 0) {
-      source = minisProducts
-      label = 'tailored to this post'
-      detail = (tagsResult?.tags && tagsResult.tags.length > 0) ? `tags: ${tagsResult.tags.slice(0, 10).join(', ')}` : ''
-      hasNext = !!curatedHasNext
-      fetchMore = curatedFetchMore as any
-      loading = !!minisLoading
-      error = (minisError as any)?.message || (minisError as any) || null
+    } else if (aiProducts && aiProducts.length > 0) {
+      source = aiProducts
+      label = 'AI search'
+      detail = aiQuery ? `query: ${aiQuery}` : ''
+      hasNext = !!aiHasNext
+      fetchMore = aiFetchMore as any
+      loading = !!aiLoading
+      error = (aiError as any)?.message || (aiError as any) || null
     } else if (recProducts && recProducts.length > 0) {
       source = recProducts
       label = 'recommended for you'
@@ -686,11 +654,11 @@ function CurationsOverlay({
     searchLoading,
     searchIsTyping,
     searchError,
-    minisProducts,
-    curatedHasNext,
-    curatedFetchMore,
-    minisLoading,
-    minisError,
+    aiProducts,
+    aiHasNext,
+    aiFetchMore,
+    aiLoading,
+    aiError,
     recProducts,
     recHasNext,
     recFetchMore,
@@ -735,6 +703,17 @@ function CurationsOverlay({
   const [activeTab, setActiveTab] = useState<'browse' | 'cart'>('browse')
   const sheetSizeClass = 'h-[90vh] max-h-[90vh]'
 
+  // Fetch "my responses" (previous carts) for this request
+  const [myResponses, setMyResponses] = useState<SubmittedCart[] | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    setMyResponses(null)
+    cartsService.listMineByRequest(request.id)
+      .then((res) => { if (!cancelled) setMyResponses(res) })
+      .catch(() => { if (!cancelled) setMyResponses([]) })
+    return () => { cancelled = true }
+  }, [request.id])
+
   // Removed SimpleProductTile; we now use the SDK's ProductCard
 
   // Stores UI removed
@@ -771,9 +750,9 @@ function CurationsOverlay({
           <div className="p-4 space-y-6">
             {/* Stores removed */}
 
-            {/* Tabs */}
-            <section>
-              <div className="flex items-center gap-2 mb-2">
+            {/* Tabs (sticky with header) */}
+            <section className="sticky top-12 z-20 bg-white pb-2 border-b">
+              <div className="flex items-center gap-2 px-0.5">
                 <button
                   className={`px-3 py-1.5 rounded-full text-xs border ${activeTab === 'browse' ? 'bg-[#5A31F4] text-white border-[#5A31F4]' : 'bg-white text-gray-700 border-gray-300'}`}
                   onClick={() => setActiveTab('browse')}
@@ -838,7 +817,21 @@ function CurationsOverlay({
                   {items.length === 0 ? (
                     <div className="text-sm text-gray-500 px-0.5">No items yet. Add products from Browse.</div>
                   ) : null}
-                  <div className="space-y-2 pb-28">
+                  {/* My responses preview */}
+                  {myResponses && myResponses.length > 0 ? (
+                    <div className="mb-3 px-0.5">
+                      <div className="text-xs text-gray-600">Your previous responses</div>
+                      <div className="mt-1 flex gap-2 overflow-x-auto -mx-0.5 px-0.5">
+                        {myResponses.map((c) => (
+                          <div key={c.id} className="shrink-0 px-2 py-1 rounded-full border text-xs bg-white">
+                            {new Date(c.submittedAt).toLocaleDateString()}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="space-y-2 pb-20">
                     {items.map((it, idx) => (
                       <div key={`ci-${idx}`} className="flex items-center gap-3 border rounded-lg p-2">
                         <div className="h-16 w-16 rounded-md overflow-hidden bg-gray-100">
@@ -856,8 +849,8 @@ function CurationsOverlay({
                     ))}
                   </div>
                   {/* Sticky submit at bottom */}
-                  <div className="sticky bottom-0 left-0 right-0 bg-white pt-2 border-t" style={{ paddingBottom: 'max(20px, env(safe-area-inset-bottom))' }}>
-                    <div className="px-0.5">
+                  <div className="sticky bottom-0 left-0 right-0 bg-white border-t" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+                    <div className="px-0.5 py-2">
                       <button
                         disabled={items.length === 0}
                         onClick={async () => {
@@ -865,12 +858,12 @@ function CurationsOverlay({
                           await cartsService.submit({ requestId: request.id, items })
                           onClose()
                         }}
-                        className={`w-full px-4 py-2 rounded-full text-sm font-medium ${items.length > 0 ? 'bg-[#5A31F4] text-white' : 'bg-gray-200 text-gray-500'}`}
+                        className={`w-full h-10 rounded-full text-sm font-medium ${items.length > 0 ? 'bg-[#5A31F4] text-white' : 'bg-gray-200 text-gray-500'}`}
                       >
                         Submit cart
                       </button>
                     </div>
-              </div>
+                  </div>
                 </>
               )}
             </section>

@@ -1,11 +1,9 @@
-import boto3
 import os
 import uuid
-from botocore.config import Config
-from botocore.exceptions import ClientError
 from fastapi import HTTPException
 import mimetypes
 from dotenv import load_dotenv
+from .shopify_files_service import ShopifyFilesService
 
 # Load environment variables from .env file
 load_dotenv()
@@ -15,27 +13,8 @@ class R2Service:
     """Cloudflare R2 storage service for handling file uploads and management"""
     
     def __init__(self):
-        # R2 credentials and configuration
-        self.endpoint_url = os.getenv("R2_ENDPOINT_URL")
-        self.access_key_id = os.getenv("R2_ACCESS_KEY_ID")
-        self.secret_access_key = os.getenv("R2_SECRET_ACCESS_KEY")
-        self.bucket_name = os.getenv("R2_BUCKET_NAME")
-        self.public_url_base = os.getenv("R2_PUBLIC_URL_BASE")
-        
-        if not all([self.endpoint_url, self.access_key_id, self.secret_access_key, self.bucket_name]):
-            raise ValueError("Missing required R2 environment variables. Please set R2_ENDPOINT_URL, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, and R2_BUCKET_NAME")
-        
-        # Configure S3 client for R2
-        self.s3_client = boto3.client(
-            's3',
-            endpoint_url=self.endpoint_url,
-            aws_access_key_id=self.access_key_id,
-            aws_secret_access_key=self.secret_access_key,
-            config=Config(
-                region_name='auto',  # R2 uses 'auto' region
-                signature_version='s3v4',
-            )
-        )
+        # Completely delegate to Shopify implementation while keeping the same interface
+        self.shopify = ShopifyFilesService()
     
     def _generate_file_key(self, request_id: str, filename: str) -> str:
         """Generate a unique file key for R2 storage"""
@@ -60,32 +39,8 @@ class R2Service:
         Returns:
             The public URL of the uploaded file
         """
-        try:
-            file_key = self._generate_file_key(request_id, filename)
-            content_type = self._get_content_type(filename)
-            
-            # Upload file to R2
-            self.s3_client.put_object(
-                Bucket=self.bucket_name,
-                Key=file_key,
-                Body=file_content,
-                ContentType=content_type,
-                # Make file publicly readable if needed
-                ACL='public-read'
-            )
-
-            return file_key
-            
-        except ClientError as e:
-            raise HTTPException(
-                status_code=500, 
-                detail=f"Failed to upload file to R2: {str(e)}"
-            )
-        except Exception as e:
-            raise HTTPException(
-                status_code=500, 
-                detail=f"Unexpected error during file upload: {str(e)}"
-            )
+        # Delegate upload to Shopify Admin API service; returns Shopify file ID
+        return await self.shopify.upload_file(request_id, file_content, filename)
     
     async def delete_file(self, file_key: str) -> bool:
         """
@@ -97,28 +52,7 @@ class R2Service:
         Returns:
             True if deletion was successful
         """
-        try:
-            # Delete file from R2
-            self.s3_client.delete_object(
-                Bucket=self.bucket_name,
-                Key=file_key
-            )
-            
-            return True
-            
-        except ClientError as e:
-            # If file doesn't exist, consider it successfully deleted
-            if e.response['Error']['Code'] == 'NoSuchKey':
-                return True
-            raise HTTPException(
-                status_code=500, 
-                detail=f"Failed to delete file from R2: {str(e)}"
-            )
-        except Exception as e:
-            raise HTTPException(
-                status_code=500, 
-                detail=f"Unexpected error during file deletion: {str(e)}"
-            )
+        return await self.shopify.delete_file(file_key)
     
     def get_signed_url(self, file_key: str, expiration: int = 3600) -> str:
         """
@@ -131,21 +65,8 @@ class R2Service:
         Returns:
             Signed URL for temporary access
         """
-        try:
-            # Generate signed URL
-            signed_url = self.s3_client.generate_presigned_url(
-                'get_object',
-                Params={'Bucket': self.bucket_name, 'Key': file_key},
-                ExpiresIn=expiration
-            )
-            
-            return signed_url
-            
-        except ClientError as e:
-            raise HTTPException(
-                status_code=500, 
-                detail=f"Failed to generate signed URL: {str(e)}"
-            )
+        # For Shopify we just resolve and return the public URL
+        return self.shopify.get_signed_url(file_key, expiration)
 
 
 # Global R2 service instance

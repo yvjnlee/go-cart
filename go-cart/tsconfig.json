@@ -27,7 +27,12 @@
     "strictPropertyInitialization": true,
     "noImplicitThis": true,
     "alwaysStrict": true,
-    "useUnknownInCatchVariables": false
+    "useUnknownInCatchVariables": false,
+    "baseUrl": ".",
+    "paths": {
+      "@shopify/shop-minis-react": ["src/shims/shop-minis-react"],
+      "@shopify/shop-minis-react/*": ["src/shims/shop-minis-react"]
+    }
   },
   "exclude": ["node_modules", "dist"]
 }

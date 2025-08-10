@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { CartItem, ShoppingRequest } from '../../types'
+import { useProductSearch } from '@shopify/shop-minis-react'
+import type { CartItem, ShoppingRequest, CartItemProductSnapshot } from '../../types'
 import { curationService, type CuratedSection } from '../../services/curation.service'
+import { generateProductSearchQuery } from '../../services/fal.service'
 import CartSpotlight from '../cart/CartSpotlight'
 import { storage } from '../../services/storage'
 import { CartItemList } from '../cart/CartItemList'
+import { cartsService } from '../../services/cart.service'
 
 export default function RequestDetailOverlay({ request, onClose }: { request: ShoppingRequest; onClose: () => void }) {
   const [tab, setTab] = useState<'crowdcarts' | 'added'>('crowdcarts')
@@ -12,7 +15,22 @@ export default function RequestDetailOverlay({ request, onClose }: { request: Sh
   const [crowdcartIndex, setCrowdcartIndex] = useState(0)
 
   useEffect(() => {
-    storage.getUserCartItemsForRequest(request.id).then((list) => setUserItems(list as CartItem[]))
+    // Use cartsService to fetch the user's cart items for this request, and convert to CartItem[]
+    cartsService.listMineByRequest(request.id).then((submittedCarts) => {
+      // Flatten all items from all submitted carts (if multiple), and filter out any incomplete items
+      const items: CartItem[] = [];
+      for (const cart of submittedCarts) {
+        if (Array.isArray(cart.items)) {
+          for (const item of cart.items) {
+            // Only include items that have a product with an id
+            if (item && item.product && item.product.id) {
+              items.push(item as CartItem);
+            }
+          }
+        }
+      }
+      setUserItems(items);
+    });
   }, [request.id])
 
   function addUserItem(item: CartItem) {
@@ -106,9 +124,47 @@ function SwipeCrowdcarts({
   const swipeScrollRef = useRef<HTMLDivElement | null>(null)
   const swipeTransformRef = useRef<HTMLDivElement | null>(null)
 
+  // (Tags no longer required for Minis search fallback)
+
   useEffect(() => {
     curationService.getCuratedSections(request).then(setSections)
   }, [request])
+
+  // (Removed tag generation)
+
+  // Build AI query and use Minis search when no backend sections
+  const [searchQuery, setSearchQuery] = useState<string>('')
+  useEffect(() => {
+    let cancelled = false
+    if (sections && sections.length > 0) {
+      setSearchQuery('')
+      return
+    }
+    generateProductSearchQuery(request).then((q) => { if (!cancelled) setSearchQuery(q) })
+    return () => { cancelled = true }
+  }, [request, sections?.length])
+  const minis = useProductSearch({
+    handle: request.id,
+    query: searchQuery,
+    skip: !!(sections && sections.length > 0) || !searchQuery,
+  } as any)
+
+  const minisSnapshots: CartItemProductSnapshot[] = useMemo(() => {
+    const products = minis.products ?? []
+    const mapped: CartItemProductSnapshot[] = (products as any[]).map((p: any) => ({
+      id: String(p?.id ?? ''),
+      title: String(p?.title ?? ''),
+      imageUrl: p?.featuredImage?.url ?? undefined,
+      priceAmount: p?.price?.amount != null ? Number(p.price.amount) : undefined,
+      priceCurrencyCode: p?.price?.currencyCode ?? 'USD',
+    }))
+    const seen = new Set<string>()
+    return mapped.filter((p) => {
+      if (!p.id || seen.has(p.id)) return false
+      seen.add(p.id)
+      return true
+    })
+  }, [minis.products])
 
   useEffect(() => {
     let cancelled = false
@@ -120,9 +176,14 @@ function SwipeCrowdcarts({
   }, [request.id])
 
   const profiles = useMemo(() => {
-    if (!sections) return []
-    return sections.map(sec => ({ id: sec.title, title: sec.title, products: sec.products }))
-  }, [sections])
+    if (sections && sections.length > 0) {
+      return sections.map((sec) => ({ id: sec.title, title: sec.title, products: sec.products }))
+    }
+    if (minisSnapshots.length > 0) {
+      return [{ id: 'Curated picks', title: 'Curated picks', products: minisSnapshots }]
+    }
+    return []
+  }, [sections, minisSnapshots])
 
   const filteredProfiles = useMemo(() => profiles.filter(p => !dismissedIds.has(p.id)), [profiles, dismissedIds])
 
@@ -208,7 +269,8 @@ function SwipeCrowdcarts({
     }
   }
 
-  if (!sections) return <div className="h-full flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"/></div>
+  const isLoading = (sections == null) || ((sections?.length ?? 0) === 0 && minis.loading)
+  if (isLoading) return <div className="h-full flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"/></div>
   if (filteredProfiles.length === 0) return (
     <div className="h-full w-full flex items-center justify-center">
       <div className="text-center p-6">
@@ -248,7 +310,7 @@ function SwipeCrowdcarts({
                 transition: animating ? 'transform 260ms cubic-bezier(0.22, 1, 0.36, 1)' : 'none'
               }}
             >
-              <CartSpotlight
+               <CartSpotlight
                 request={request}
                 items={current.products.map(p => ({ product: p, quantity: 1 }))}
                 userItemsForInCart={items}

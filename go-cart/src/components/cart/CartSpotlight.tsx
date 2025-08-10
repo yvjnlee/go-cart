@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useCuratedProducts } from '@shopify/shop-minis-react'
+import { ProductCard, useProduct, useProductSearch } from '@shopify/shop-minis-react'
 import type { CartItem, CartItemProductSnapshot, ShoppingRequest } from '../../types'
-import { getOrGenerateCartProfileCopy, getCachedCartProfileCopy, prefetchCartProfileCopy, type CartProfileCopy } from '../../services/fal.service'
-import { curationService } from '../../services/curation.service'
+import { getOrGenerateCartProfileCopy, getCachedCartProfileCopy, prefetchCartProfileCopy, type CartProfileCopy, generateProductSearchQuery } from '../../services/fal.service'
+// curationService no longer needed for tags in this component
 
 interface Props {
   request: ShoppingRequest
@@ -20,30 +20,28 @@ export default function CartSpotlight({ request, items, onAddItem, onRemoveItem,
   const [copy, setCopy] = useState<CartProfileCopy | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [tagsResult, setTagsResult] = useState<{ summary: string; tags: string[] } | null>(null)
-  const [tagsLoading, setTagsLoading] = useState<boolean>(true)
-  const [tagsError, setTagsError] = useState<string | null>(null)
-
-  // Generate tags for request
-  useEffect(() => {
-    let cancelled = false
-    setTagsLoading(true)
-    setTagsError(null)
-    setTagsResult(null)
-    curationService.generateTagsForRequest(request)
-      .then(res => { if (!cancelled) setTagsResult(res) })
-      .catch(err => { if (!cancelled) setTagsError(err?.message || 'Failed to generate tags') })
-      .finally(() => { if (!cancelled) setTagsLoading(false) })
-    return () => { cancelled = true }
-  }, [request])
+  
 
   const moodboardProducts: CartItemProductSnapshot[] = useMemo(() => items.map(i => i.product), [items])
 
-  // Fetch curated products via Minis when moodboard is empty
-  const { products: minisProducts, loading: minisLoading, error: minisError } = useCuratedProducts({
+  // Build AI search query and use Minis search when moodboard is empty
+  const [searchQuery, setSearchQuery] = useState<string>('')
+  useEffect(() => {
+    let cancelled = false
+    if (moodboardProducts.length > 0) {
+      setSearchQuery('')
+      return
+    }
+    generateProductSearchQuery(request).then((q) => {
+      if (!cancelled) setSearchQuery(q)
+    })
+    return () => { cancelled = true }
+  }, [request, moodboardProducts.length])
+
+  const { products: minisProducts, loading: minisLoading, error: minisError } = useProductSearch({
     handle: request.id,
-    requiredTags: tagsResult?.tags,
-    skip: moodboardProducts.length > 0,
+    query: searchQuery,
+    skip: moodboardProducts.length > 0 || !searchQuery,
   } as any)
 
   const fallbackProductsFromMinis: CartItemProductSnapshot[] = useMemo(() => {
@@ -95,8 +93,8 @@ export default function CartSpotlight({ request, items, onAddItem, onRemoveItem,
     return { inCart: idx >= 0, index: idx }
   }
 
-  const productsLoading = moodboardProducts.length > 0 ? false : (minisLoading || tagsLoading)
-  const productsError = tagsError || (minisError as any)?.message || (minisError as any) || null
+  const productsLoading = moodboardProducts.length > 0 ? false : minisLoading
+  const productsError = (minisError as any)?.message || (minisError as any) || null
 
   return (
     <div className={isOverlay ? 'fixed inset-0 z-50' : 'w-full bg-white'}>
@@ -143,19 +141,31 @@ export default function CartSpotlight({ request, items, onAddItem, onRemoveItem,
                 </section>
               ) : null}
 
-              {/* Product sections - full width cards stacked */}
+               {/* Product sections - full width cards stacked. When embedded (swipe), prefer Minis ProductCard with useProduct. */}
               <section className="p-4 space-y-6 pb-28">
                 {baseProducts.map(p => {
                   const { inCart, index } = isInCart(p.id)
                   return (
                     <article key={p.id} className="mx-auto w-full max-w-2xl bg-white border rounded-2xl overflow-hidden shadow-sm">
-                      <div className="w-full bg-gray-100">
-                        {p.imageUrl ? (
-                          <img src={p.imageUrl} alt={p.title || 'Product'} className="w-full h-[280px] sm:h-[360px] object-cover" />
-                        ) : (
-                          <div className="w-full h-[280px] sm:h-[360px] bg-gray-100" />)
-                        }
-                      </div>
+                      {!isOverlay ? (
+                        <EmbeddedProduct productId={p.id} fallback={
+                          <div className="w-full bg-gray-100">
+                            {p.imageUrl ? (
+                              <img src={p.imageUrl} alt={p.title || 'Product'} className="w-full h-[280px] sm:h-[360px] object-cover" />
+                            ) : (
+                              <div className="w-full h-[280px] sm:h-[360px] bg-gray-100" />)
+                            }
+                          </div>
+                        } />
+                      ) : (
+                        <div className="w-full bg-gray-100">
+                          {p.imageUrl ? (
+                            <img src={p.imageUrl} alt={p.title || 'Product'} className="w-full h-[280px] sm:h-[360px] object-cover" />
+                          ) : (
+                            <div className="w-full h-[280px] sm:h-[360px] bg-gray-100" />)
+                          }
+                        </div>
+                      )}
                       <div className="p-4">
                         <div className="flex items-start justify-between gap-3">
                           <div>
@@ -180,6 +190,18 @@ export default function CartSpotlight({ request, items, onAddItem, onRemoveItem,
           </div>
         ) : null}
       </div>
+    </div>
+  )
+}
+
+
+function EmbeddedProduct({ productId, fallback }: { productId: string; fallback?: JSX.Element }) {
+  const { product, loading } = useProduct({ id: productId } as any)
+  if (loading && fallback) return fallback
+  if (!product) return fallback ?? null
+  return (
+    <div className="w-full">
+      <ProductCard product={product as any} />
     </div>
   )
 }

@@ -6,10 +6,11 @@ export interface ApiError extends Error {
   info?: unknown
 }
 
-const API_BASE_URL: string = (import.meta as any)?.env?.VITE_API_BASE_URL || 'http://localhost:8000'
+const API_BASE =
+  (import.meta as any).env?.VITE_API_BASE || "http://localhost:8000";
 
 function buildUrl(path: string, params?: Record<string, string | number | boolean | undefined | null>): string {
-  const base = path.startsWith('http') ? path : `${API_BASE_URL}${path}`
+  const base = path.startsWith('http') ? path : `${API_BASE}${path}`
   if (!params) return base
   const query = new URLSearchParams()
   Object.entries(params).forEach(([key, value]) => {

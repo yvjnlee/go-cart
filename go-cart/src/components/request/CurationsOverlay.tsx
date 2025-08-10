@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useCuratedProducts } from '@shopify/shop-minis-react'
+import { useProductSearch } from '@shopify/shop-minis-react'
 import type { CartItem, CartItemProductSnapshot, ShoppingRequest } from '../../types'
-import { curationService } from '../../services/curation.service'
+import { curationService, type CuratedStore } from '../../services/curation.service'
+import { generateProductSearchQuery } from '../../services/fal.service'
 
 interface Props {
   request: ShoppingRequest
@@ -12,26 +13,19 @@ interface Props {
 }
 
 export default function CurationsOverlay({ request, items, onAddItem, onRemoveItem, onClose }: Props) {
-  // Generate tags for request
-  const [tagsResult, setTagsResult] = useState<{ summary: string; tags: string[] } | null>(null)
-  const [tagsLoading, setTagsLoading] = useState<boolean>(true)
-  const [tagsError, setTagsError] = useState<string | null>(null)
+  // (Tags no longer required; search will use AI query directly)
+
+  // AI query + Minis product search
+  const [searchQuery, setSearchQuery] = useState<string>('')
   useEffect(() => {
     let cancelled = false
-    setTagsLoading(true)
-    setTagsError(null)
-    setTagsResult(null)
-    curationService.generateTagsForRequest(request)
-      .then(res => { if (!cancelled) setTagsResult(res) })
-      .catch(err => { if (!cancelled) setTagsError(err?.message || 'Failed to generate tags') })
-      .finally(() => { if (!cancelled) setTagsLoading(false) })
+    generateProductSearchQuery(request).then((q) => { if (!cancelled) setSearchQuery(q) })
     return () => { cancelled = true }
   }, [request])
-
-  // Minis curated products
-  const { products: minisProducts, loading: minisLoading, error: minisError } = useCuratedProducts({
+  const { products: minisProducts, loading: minisLoading, error: minisError } = useProductSearch({
     handle: request.id,
-    requiredTags: tagsResult?.tags,
+    query: searchQuery,
+    skip: !searchQuery,
   } as any)
 
   const productSnapshots: CartItemProductSnapshot[] = useMemo(() => {
@@ -50,6 +44,14 @@ export default function CurationsOverlay({ request, items, onAddItem, onRemoveIt
       return true
     })
   }, [minisProducts])
+
+  // Stores (optional): fetch from curation service when available
+  const [stores, setStores] = useState<CuratedStore[] | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    curationService.getCuratedStores(request).then((res) => { if (!cancelled) setStores(res) })
+    return () => { cancelled = true }
+  }, [request])
 
   function SimpleProductTile({ p, inCartIdx }: { p: CartItemProductSnapshot; inCartIdx: number }) {
     return (
@@ -100,7 +102,7 @@ export default function CurationsOverlay({ request, items, onAddItem, onRemoveIt
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl border-t border-gray-200 max-h-[92vh] overflow-y-auto">
-        <div className="p-4 border-b sticky top-0 bg-white z-10 flex items-center justify-between">
+        <div className="p-4 border-b sticky top-0 bg-white z-20 flex items-center justify-between">
           <div>
             <h4 className="text-base font-semibold">Shop for “{request.title}”</h4>
             <p className="text-xs text-gray-500">Budget ${request.budget}{request.occasion ? ` · ${request.occasion}` : ''}</p>
@@ -108,10 +110,10 @@ export default function CurationsOverlay({ request, items, onAddItem, onRemoveIt
           <button onClick={onClose} className="text-sm text-gray-600 hover:text-gray-800">Close</button>
         </div>
 
-        {loading ? (
+        {minisLoading ? (
           <div className="py-12 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"/></div>
-        ) : error ? (
-          <div className="p-4 text-sm text-red-600">{error}</div>
+        ) : minisError ? (
+          <div className="p-4 text-sm text-red-600">{String(minisError)}</div>
         ) : (
           <div className="p-4 space-y-6">
             <section>
@@ -128,7 +130,7 @@ export default function CurationsOverlay({ request, items, onAddItem, onRemoveIt
                 </div>
               </div>
             </section>
-
+            
             <section>
               <div className="mb-2 px-0.5">
                 <h5 className="text-sm font-semibold text-gray-900">Products</h5>

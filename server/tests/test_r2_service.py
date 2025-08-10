@@ -1,63 +1,36 @@
-import os
 import pytest
-
 from app.r2_service import R2Service
 
 
-class DummyS3Client:
-    def __init__(self):
-        self.put_calls = []
-        self.delete_calls = []
+@pytest.mark.asyncio
+async def test_adapter_uses_shopify(monkeypatch):
+    # Ensure env does not require R2
+    monkeypatch.delenv("ASSETS_BACKEND", raising=False)
 
-    def put_object(self, Bucket, Key, Body, ContentType, ACL):
-        self.put_calls.append({
-            "Bucket": Bucket,
-            "Key": Key,
-            "Body": Body,
-            "ContentType": ContentType,
-            "ACL": ACL,
-        })
+    # Provide minimal Shopify env to construct the service
+    monkeypatch.setenv("SHOPIFY_STORE_DOMAIN", "example.myshopify.com")
+    monkeypatch.setenv("SHOPIFY_ADMIN_ACCESS_TOKEN", "shpat_test")
+    monkeypatch.setenv("SHOPIFY_API_VERSION", "2025-07")
 
-    def delete_object(self, Bucket, Key):
-        self.delete_calls.append({"Bucket": Bucket, "Key": Key})
-
-    def generate_presigned_url(self, operation, Params, ExpiresIn):
-        return f"https://example.com/{Params['Bucket']}/{Params['Key']}?expires={ExpiresIn}"
-
-
-@pytest.fixture(autouse=True)
-def env(monkeypatch):
-    monkeypatch.setenv("R2_ENDPOINT_URL", "https://r2.example.com")
-    monkeypatch.setenv("R2_ACCESS_KEY_ID", "key")
-    monkeypatch.setenv("R2_SECRET_ACCESS_KEY", "secret")
-    monkeypatch.setenv("R2_BUCKET_NAME", "bucket")
-    monkeypatch.setenv("R2_PUBLIC_URL_BASE", "https://cdn.example.com")
-
-
-def test_upload_and_delete_and_signed_url(monkeypatch):
-    dummy = DummyS3Client()
-    # Patch boto3.client used inside R2Service.__init__ to return our dummy
+    # Stub ShopifyFilesService methods to avoid network
     import app.r2_service as r2_mod
-    monkeypatch.setattr(r2_mod.boto3, "client", lambda *args, **kwargs: dummy)
+    monkeypatch.setattr(r2_mod, "ShopifyFilesService", lambda: _FakeShopify())
 
     svc = R2Service()
+    fid = await svc.upload_file("req123", b"data", "pic.png")
+    assert fid.startswith("gid://shopify/File/")
+    assert await svc.delete_file(fid) is True
+    url = svc.get_signed_url(fid, 60)
+    assert url.endswith("/pic.png")
 
-    # Upload
-    import asyncio
-    file_key = asyncio.get_event_loop().run_until_complete(
-        svc.upload_file("req123", b"data", "pic.png")
-    )
-    assert file_key.startswith("request-assets/req123/")
-    assert len(dummy.put_calls) == 1
-    assert dummy.put_calls[0]["Bucket"] == "bucket"
-    assert dummy.put_calls[0]["ContentType"] == "image/png"
 
-    # Signed URL
-    signed = svc.get_signed_url(file_key, expiration=123)
-    assert "expires=123" in signed
+class _FakeShopify:
+    async def upload_file(self, request_id, file_content, filename):
+        return "gid://shopify/File/123"
 
-    # Delete
-    ok = asyncio.get_event_loop().run_until_complete(svc.delete_file(file_key))
-    assert ok is True
-    assert len(dummy.delete_calls) == 1
+    async def delete_file(self, file_key):
+        return True
+
+    def get_signed_url(self, file_key, expiration):
+        return "https://cdn.shopify.com/pic.png"
 
