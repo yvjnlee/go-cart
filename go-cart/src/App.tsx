@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import RequestFeed from './components/RequestFeed'
 import { NavBar } from './components/NavBar'
-import PostComposer from './components/PostComposer'
+import RequestsProfile from './components/RequestsProfile'
 
 type AppView = 'feed' | 'shoppingRequests'
 
@@ -16,7 +16,7 @@ export function App() {
           <RequestFeed />
         </div>
         <div className={currentView === 'shoppingRequests' ? 'h-full' : 'hidden'}>
-          <PostComposer />
+          <RequestsProfile />
         </div>
       </div>
     </div>
