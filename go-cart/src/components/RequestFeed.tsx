@@ -15,27 +15,44 @@ export function RequestFeed() {
   const [activeIndex, setActiveIndex] = useState(0)
 
   useEffect(() => {
-    requestsService.list().then(setRequests)
+    console.log('RequestFeed: Loading requests...')
+    requestsService.list().then(data => {
+      console.log('RequestFeed: Loaded requests:', data)
+      setRequests(data)
+    }).catch(err => {
+      console.error('RequestFeed: Error loading requests:', err)
+      setRequests([])
+    })
   }, [])
 
   useEffect(() => {
     setItems([])
   }, [selectedRequest?.id])
 
+  console.log('RequestFeed render:', { requests, requestsLength: requests?.length })
+
   if (requests === null) {
     return (
       <div className="flex justify-center items-center h-[70vh]">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <p className="ml-2 text-white">Loading requests...</p>
       </div>
     )
   }
 
   if (requests.length === 0) {
-    return <div className="text-center py-12 text-gray-500">No requests yet.</div>
+    return (
+      <div className="text-center py-12 text-gray-500 h-full flex items-center justify-center">
+        <div>
+          <h3 className="text-white text-lg mb-2">No requests yet</h3>
+          <p className="text-gray-400">Create a post to see requests here!</p>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="relative">
+    <div className="relative bg-black">
       <div
         className="h-[calc(100vh-6rem)] overflow-y-auto snap-y snap-mandatory"
         ref={scrollFeedRef}
@@ -94,7 +111,7 @@ function ReelCard({ request, isActive, onShop }: { request: ShoppingRequest; isA
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const videoRef = useRef<HTMLVideoElement | null>(null)
-  const [isPlaying, setIsPlaying] = useState(true)
+
   const [showHud, setShowHud] = useState(false)
   const hudHideTimeoutRef = useRef<number | null>(null)
   const [isMuted, setIsMuted] = useState(true)
@@ -103,6 +120,11 @@ function ReelCard({ request, isActive, onShop }: { request: ShoppingRequest; isA
   const wasPlayingBeforeHoldRef = useRef(false)
   const suppressNextClickRef = useRef(false)
   const suppressClickUntilRef = useRef(0)
+  
+  // Cart animation states
+  const [cartShaking, setCartShaking] = useState(false)
+  const [cartExpanded, setCartExpanded] = useState(false)
+  const cartTimeoutRef = useRef<number | null>(null)
 
   function handleScroll() {
     const el = scrollContainerRef.current
@@ -119,15 +141,7 @@ function ReelCard({ request, isActive, onShop }: { request: ShoppingRequest; isA
     el.scrollTo({ left: containerWidth * index, behavior: 'smooth' })
   }
 
-  function togglePlay() {
-    const el = videoRef.current
-    if (!el) return
-    if (el.paused) {
-      el.play().catch(() => {})
-    } else {
-      el.pause()
-    }
-  }
+
 
   function toggleMute() {
     const el = videoRef.current
@@ -150,7 +164,6 @@ function ReelCard({ request, isActive, onShop }: { request: ShoppingRequest; isA
       if (!el.paused) {
         wasPlayingBeforeHoldRef.current = true
         el.pause()
-        setIsPlaying(false)
         showHudTemporarily()
       }
     }, 280)
@@ -209,6 +222,43 @@ function ReelCard({ request, isActive, onShop }: { request: ShoppingRequest; isA
     }
   }, [isActive])
 
+  // Handle cart animation for all active cards (videos and images)
+  useEffect(() => {
+    if (!isActive) {
+      // Reset cart animation when card becomes inactive
+      if (cartTimeoutRef.current) {
+        clearTimeout(cartTimeoutRef.current)
+        cartTimeoutRef.current = null
+      }
+      setCartShaking(false)
+      setCartExpanded(false)
+    } else {
+      // Start cart animation timer when card becomes active
+      cartTimeoutRef.current = window.setTimeout(() => {
+        console.log('Starting cart shake animation')
+        setCartShaking(true)
+        // After shaking for 1 second, expand the button
+        setTimeout(() => {
+          console.log('Expanding cart button')
+          setCartShaking(false)
+          setCartExpanded(true)
+        }, 1000)
+      }, 3000)
+    }
+  }, [isActive])
+
+  // Cleanup cart timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (cartTimeoutRef.current) {
+        clearTimeout(cartTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  // Debug logging
+  console.log('ReelCard render:', { isActive, cartShaking, cartExpanded })
+
   return (
     <div className="relative h-full w-full overflow-hidden bg-black">
       {media ? (
@@ -245,8 +295,8 @@ function ReelCard({ request, isActive, onShop }: { request: ShoppingRequest; isA
                 toggleMute();
                 showHudTemporarily()
               }}
-              onPlay={() => { setIsPlaying(true); showHudTemporarily() }}
-              onPause={() => { setIsPlaying(false); showHudTemporarily() }}
+              onPlay={() => { showHudTemporarily() }}
+              onPause={() => { showHudTemporarily() }}
             />
             <button
               aria-label={isMuted ? 'Unmute video' : 'Mute video'}
@@ -297,40 +347,69 @@ function ReelCard({ request, isActive, onShop }: { request: ShoppingRequest; isA
       )}
 
       <button
-        className="absolute bottom-28 left-1/2 -translate-x-1/2 z-10 px-4 py-2 rounded-full text-sm font-medium text-white bg-[#5A31F4] hover:bg-[#4E28D6]"
+        className={`absolute bottom-28 right-4 z-10 rounded-full text-sm font-semibold text-white bg-gradient-to-r from-[#5A31F4] to-[#6E3AFF] hover:from-[#4E28D6] hover:to-[#5E2FD1] shadow-lg shadow-purple-500/25 transform hover:scale-105 transition-all duration-300 backdrop-blur-sm border border-white/10 ${
+          cartShaking ? 'animate-shake' : ''
+        } ${
+          cartExpanded ? 'px-6 py-3' : 'p-3'
+        }`}
         onClick={onShop}
       >
-        Shop for them
+        <div className={`flex items-center ${cartExpanded ? 'gap-2' : 'justify-center'}`}>
+          <svg 
+            width="20" 
+            height="20" 
+            viewBox="0 0 24 24" 
+            fill="currentColor"
+          >
+            <path d="M7 18c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12L8.1 13h7.45c.75 0 1.41-.41 1.75-1.03L21.7 4H5.21l-.94-2H1zm16 16c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+          </svg>
+          <span className={`whitespace-nowrap transition-all duration-300 ${
+            cartExpanded ? 'opacity-100 max-w-32' : 'opacity-0 max-w-0 overflow-hidden'
+          }`}>
+            Shop for them
+          </span>
+        </div>
       </button>
 
       {null}
 
       <div
-        className="absolute inset-x-0 bottom-0 z-10 p-4 bg-gradient-to-t from-black/70 via-black/40 to-transparent"
+        className="absolute inset-x-0 bottom-0 z-10 p-6 bg-gradient-to-t from-black/80 via-black/50 to-transparent"
       >
         {media?.type === 'image' && media.urls && media.urls.length > 1 ? (
-          <div className="mb-2 flex items-center justify-center gap-1.5" onClick={e => e.stopPropagation()}>
+          <div className="mb-4 flex items-center justify-center gap-2" onClick={e => e.stopPropagation()}>
             {media.urls.map((_, i) => (
               <button
                 key={i}
                 aria-label={`Go to image ${i + 1}`}
-                className={`h-1.5 w-1.5 rounded-full transition-all ${i === currentImageIndex ? 'bg-white' : 'bg-white/40'}`}
+                className={`h-2 w-2 rounded-full transition-all duration-300 ${i === currentImageIndex ? 'bg-white scale-125' : 'bg-white/50 hover:bg-white/70'}`}
                 onClick={() => scrollToImage(i)}
               />
             ))}
           </div>
         ) : null}
-        <h3 className="text-white font-semibold text-base">{request.title}</h3>
-        <div className="relative mt-1">
-          <p className={`text-white/95 text-sm ${isDescriptionExpanded ? 'line-clamp-none max-h-28 overflow-y-auto pr-28' : 'line-clamp-1 pr-24'}`}>{request.description}</p>
-          <button
-            className="absolute right-0 top-0 text-xs font-medium text-white/90 underline decoration-white/60 hover:text-white"
-            onClick={(e) => { e.stopPropagation(); setIsDescriptionExpanded(prev => !prev) }}
-          >
-            {isDescriptionExpanded ? 'Show less' : 'Show more'}
-          </button>
+        <div className="space-y-3">
+          <h3 className="text-white font-bold text-lg leading-tight">{request.title}</h3>
+          <div className="relative">
+            <p className="text-white/95 text-sm leading-relaxed line-clamp-2">{request.description}</p>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/20">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="text-green-400">
+                <path d="M12 2C13.1 2 14 2.9 14 4C14 5.1 13.1 6 12 6C10.9 6 10 5.1 10 4C10 2.9 10.9 2 12 2ZM21 9V7L15 4L13 5V7H11V5L9 4L3 7V9H21ZM2 10V12H4V22H20V12H22V10H2Z"/>
+              </svg>
+              <span className="text-white/95 text-xs font-medium">${request.budget}</span>
+            </div>
+            {request.occasion ? (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/20">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="text-purple-400">
+                  <path d="M19 3H18V1H16V3H8V1H6V3H5C3.89 3 3 3.9 3 5V19C3 20.1 3.89 21 5 21H19C20.1 21 21 20.1 21 19V5C21 3.9 20.1 3 19 3ZM19 19H5V8H19V19Z"/>
+                </svg>
+                <span className="text-white/95 text-xs font-medium">{request.occasion}</span>
+              </div>
+            ) : null}
+          </div>
         </div>
-        <div className="text-white/90 text-xs mt-1">Budget: ${request.budget}{request.occasion ? ` · ${request.occasion}` : ''}</div>
       </div>
 
       {null}
@@ -357,14 +436,22 @@ function BuilderOverlay({
 
   return (
     <div className="fixed inset-0 z-50">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl border-t border-gray-200 p-4 max-h-[85vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-2">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-2xl p-6 max-h-[85vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
           <div>
-            <h4 className="text-base font-semibold">Curate for “{request.title}”</h4>
-            <p className="text-xs text-gray-500">Build a moodboard and submit</p>
+            <h4 className="text-lg font-bold text-gray-900">Curate for "{request.title}"</h4>
+            <p className="text-sm text-gray-600 mt-1">Build a moodboard and submit</p>
           </div>
-          <button onClick={onClose} className="text-sm text-gray-600 hover:text-gray-800">Close</button>
+          <button 
+            onClick={onClose} 
+            className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
+            aria-label="Close"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-gray-600">
+              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/>
+            </svg>
+          </button>
         </div>
 
         <div className="space-y-3">
@@ -415,14 +502,22 @@ function CuratedOverlay({
 
   return (
     <div className="fixed inset-0 z-50">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="absolute inset-x-0 bottom-0 bg-white rounded-t-2xl border-t border-gray-200 p-4 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-2">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-x-0 bottom-0 bg-white rounded-t-3xl shadow-2xl p-6 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
           <div>
-            <h4 className="text-base font-semibold">Shop for “{request.title}”</h4>
-            <p className="text-xs text-gray-500">Curated, recommended and popular products</p>
+            <h4 className="text-lg font-bold text-gray-900">Shop for "{request.title}"</h4>
+            <p className="text-sm text-gray-600 mt-1">Curated, recommended and popular products</p>
           </div>
-          <button onClick={onClose} className="text-sm text-gray-600 hover:text-gray-800">Close</button>
+          <button 
+            onClick={onClose} 
+            className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
+            aria-label="Close"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-gray-600">
+              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/>
+            </svg>
+          </button>
         </div>
 
         {sections === null ? (
@@ -453,27 +548,41 @@ function CuratedOverlay({
               </div>
             ) : null}
             {sections.map((sec, i) => (
-              <div key={i} className="space-y-2">
-                <h5 className="text-sm font-medium text-gray-700">{sec.title}</h5>
-                <ul className="grid grid-cols-2 gap-3">
+              <div key={i} className="space-y-3">
+                <h5 className="text-base font-semibold text-gray-900">{sec.title}</h5>
+                <ul className="grid grid-cols-2 gap-4">
                   {sec.products.map(p => (
-                    <li key={p.id} className="bg-white border border-gray-200 rounded-md overflow-hidden">
+                    <li key={p.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
                       <div className="aspect-square bg-gray-50 flex items-center justify-center">
                         {p.imageUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img src={p.imageUrl} alt={p.title || 'Product'} className="h-full w-full object-cover" />
                         ) : (
-                          <div className="h-full w-full bg-gray-100" />
+                          <div className="h-full w-full bg-gray-100 flex items-center justify-center">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="text-gray-400">
+                              <path d="M21 19V5C21 3.9 20.1 3 19 3H5C3.9 3 3 3.9 3 5V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19ZM8.5 13.5L11 16.51L14.5 12L19 18H5L8.5 13.5Z"/>
+                            </svg>
+                          </div>
                         )}
                       </div>
-                      <div className="p-2 space-y-2">
+                      <div className="p-3 space-y-3">
                         <div>
-                          <p className="text-sm font-medium text-gray-800 truncate">{p.title || p.id}</p>
-                          <p className="text-xs text-gray-500">{p.priceCurrencyCode || 'USD'} {p.priceAmount ?? '-'}</p>
+                          <p className="text-sm font-semibold text-gray-900 line-clamp-2 leading-tight">{p.title || p.id}</p>
+                          <p className="text-sm font-bold text-green-600 mt-1">{p.priceCurrencyCode || 'USD'} {p.priceAmount ?? '-'}</p>
                         </div>
                         <div className="flex gap-2">
-                          <button className="px-3 py-1 rounded-md text-xs font-medium bg-green-600 text-white" onClick={() => addProduct(p)}>Add</button>
-                          <a className="px-3 py-1 rounded-md text-xs bg-white border border-gray-300 text-gray-700" href="#" onClick={e => e.preventDefault()}>View store</a>
+                          <button 
+                            className="flex-1 px-3 py-2 rounded-lg text-xs font-semibold bg-gradient-to-r from-[#5A31F4] to-[#6E3AFF] text-white hover:from-[#4E28D6] hover:to-[#5E2FD1] transition-all" 
+                            onClick={() => addProduct(p)}
+                          >
+                            Add to Cart
+                          </button>
+                          <button 
+                            className="px-3 py-2 rounded-lg text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors" 
+                            onClick={e => e.preventDefault()}
+                          >
+                            View
+                          </button>
                         </div>
                       </div>
                     </li>
@@ -482,11 +591,13 @@ function CuratedOverlay({
               </div>
             ))}
 
-            <div className="space-y-3">
-              <h5 className="text-sm font-medium text-gray-700">Moodboard</h5>
+            <div className="space-y-4 pt-2 border-t border-gray-200">
+              <h5 className="text-base font-semibold text-gray-900">Moodboard</h5>
               <CartItemList items={items} onRemove={onRemoveItem} />
               <div className="flex justify-end">
-                <button className="px-4 py-2 rounded-md text-sm font-medium bg-blue-600 text-white" onClick={onProceedToSubmit}>Proceed to submit</button>
+                <button className="px-6 py-3 rounded-full text-sm font-semibold bg-gradient-to-r from-[#5A31F4] to-[#6E3AFF] text-white hover:from-[#4E28D6] hover:to-[#5E2FD1] shadow-lg transition-all" onClick={onProceedToSubmit}>
+                  Proceed to submit
+                </button>
               </div>
             </div>
           </div>
