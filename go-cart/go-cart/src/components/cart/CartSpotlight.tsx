@@ -1,0 +1,251 @@
+import { useEffect, useMemo, useState } from 'react'
+import { useProduct, useProductSearch } from '@shopify/shop-minis-react'
+import type { CartItem, CartItemProductSnapshot, ShoppingRequest } from '../../types'
+import { getOrGenerateCartProfileCopy, getCachedCartProfileCopy, prefetchCartProfileCopy, type CartProfileCopy, generateProductSearchQuery } from '../../services/fal.service'
+// curationService no longer needed for tags in this component
+
+interface Props {
+  request: ShoppingRequest
+  items: CartItem[]
+  onAddItem: (it: CartItem) => void
+  onRemoveItem: (idx: number) => void
+  onClose: () => void
+  variant?: 'overlay' | 'embedded'
+  // When provided, this list is used to determine whether a product is already in the user's cart,
+  // while `items` controls which products are displayed.
+  userItemsForInCart?: CartItem[]
+}
+
+export default function CartSpotlight({ request, items, onAddItem, onRemoveItem, onClose, variant = 'overlay', userItemsForInCart }: Props) {
+  const [copy, setCopy] = useState<CartProfileCopy | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  
+
+  const moodboardProducts: CartItemProductSnapshot[] = useMemo(() => items.map(i => i.product), [items])
+
+  // Build AI search query and use Minis search when moodboard is empty
+  const [searchQuery, setSearchQuery] = useState<string>('')
+  useEffect(() => {
+    let cancelled = false
+    if (moodboardProducts.length > 0) {
+      setSearchQuery('')
+      return
+    }
+    generateProductSearchQuery(request).then((q) => {
+      if (!cancelled) setSearchQuery(q)
+    })
+    return () => { cancelled = true }
+  }, [request, moodboardProducts.length])
+
+  const { products: minisProducts, loading: minisLoading, error: minisError } = useProductSearch({
+    handle: request.id,
+    query: searchQuery,
+    skip: moodboardProducts.length > 0 || !searchQuery,
+  } as any)
+
+  const fallbackProductsFromMinis: CartItemProductSnapshot[] = useMemo(() => {
+    const products = minisProducts ?? []
+    const mapped: CartItemProductSnapshot[] = products.map((p: any) => ({
+      id: String(p?.id ?? ''),
+      title: String(p?.title ?? ''),
+      imageUrl: p?.featuredImage?.url ?? undefined,
+      priceAmount: p?.price?.amount != null ? Number(p.price.amount) : undefined,
+      priceCurrencyCode: p?.price?.currencyCode ?? 'USD',
+    }))
+    const seen = new Set<string>()
+    return mapped.filter(p => {
+      if (!p.id || seen.has(p.id)) return false
+      seen.add(p.id)
+      return true
+    })
+  }, [minisProducts])
+
+  const baseProducts: CartItemProductSnapshot[] = useMemo(() => (
+    moodboardProducts.length > 0 ? moodboardProducts : fallbackProductsFromMinis
+  ), [moodboardProducts, fallbackProductsFromMinis])
+
+  const isOverlay = variant === 'overlay'
+
+  function formatPrice(amount?: number, currencyCode?: string): string | null {
+    if (amount == null) return null
+    try {
+      return new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: currencyCode || 'USD',
+        maximumFractionDigits: 0,
+      }).format(amount)
+    } catch {
+      return `${currencyCode || 'USD'} ${amount}`
+    }
+  }
+
+  function sanitizeTagline(text?: string): string | null {
+    if (!text) return null
+    // Remove URLs and Shopify GIDs completely
+    let cleaned = text
+      .replace(/gid:\/\/shopify\/[\w/:-]+/gi, '')
+      .replace(/https?:\/\/\S+/gi, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim()
+
+    // If it's identical to a bare ID-looking token, drop it
+    if (!cleaned || /^(?:[A-Za-z0-9_\-]{10,}|gid:\/\/shopify)/i.test(cleaned)) {
+      return null
+    }
+    // Require at least one letter word to avoid showing junk
+    if (!/[A-Za-z]/.test(cleaned)) return null
+    return cleaned
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    // Try cache first for instant appearance
+    const cached = getCachedCartProfileCopy(request, baseProducts)
+    if (cached) {
+      setCopy(cached)
+      setLoading(false)
+      // still refresh in background
+      prefetchCartProfileCopy(request, baseProducts)
+      return () => { cancelled = true }
+    }
+    getOrGenerateCartProfileCopy(request, baseProducts)
+      .then(res => { if (!cancelled) setCopy(res) })
+      .catch(err => { if (!cancelled) setError(err?.message || 'Failed to generate spotlight') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [request, baseProducts])
+
+  function isInCart(productId: string): { inCart: boolean; index: number } {
+    const source = userItemsForInCart ?? items
+    const idx = source.findIndex(it => it.product.id === productId)
+    return { inCart: idx >= 0, index: idx }
+  }
+
+  const productsLoading = moodboardProducts.length > 0 ? false : minisLoading
+  const productsError = (minisError as any)?.message || (minisError as any) || null
+
+  return (
+    <div className={isOverlay ? 'fixed inset-0 z-50' : 'w-full bg-white'}>
+      {isOverlay ? <div className="absolute inset-0 bg-black/40" onClick={onClose} /> : null}
+      <div className={isOverlay ? 'absolute inset-x-0 bottom-0 bg-white rounded-t-2xl border-t border-gray-200 p-0 max-h-[92vh] overflow-hidden' : 'w-full'}>
+        {isOverlay ? (
+          <div className={`p-3 flex items-center justify-between border-b sticky top-0 bg-white z-10`}>
+            <div>
+              <h4 className="text-base font-semibold">Cart profile</h4>
+            </div>
+            <button onClick={onClose} className="text-sm text-gray-600 hover:text-gray-800">Close</button>
+          </div>
+        ) : null}
+
+        {loading || productsLoading ? (
+          <div className="py-12 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"/></div>
+        ) : error || productsError ? (
+          <div className="p-4 text-sm text-red-600">{error || productsError}</div>
+        ) : copy ? (
+          <div className="relative">
+            <div className={isOverlay ? 'h-[calc(92vh-48px)] overflow-y-auto pb-6' : 'pb-6'}>
+              {/* Intro card only in overlay mode */}
+              {isOverlay ? (
+                <section className="p-4 pb-24">
+                  <div className="mx-auto w-full max-w-2xl bg-white border rounded-2xl shadow-sm overflow-hidden">
+                    <div className="h-28 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500" />
+                    <div className="-mt-10 px-5">
+                      <div className="h-20 w-20 rounded-full border-4 border-white bg-gray-200" />
+                    </div>
+                    <div className="p-5 pt-2">
+                      <div className="text-xl font-semibold">Cart profile</div>
+                      <div className="text-sm text-gray-600">Use case: "{request.title}" · Budget ${request.budget}{request.occasion ? ` · ${request.occasion}` : ''}</div>
+                      <div className="mt-3 text-[14px] text-gray-800 whitespace-pre-wrap leading-6">{copy.about}</div>
+                      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                        {copy.prompts.slice(0, 3).map((p, idx) => (
+                          <div key={idx} className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                            <div className="text-[12px] font-medium text-gray-700">{p.prompt}</div>
+                            <div className="text-[13px] text-gray-900 mt-0.5">{p.answer}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              ) : null}
+
+               {/* Product sections - full width cards stacked. When embedded (swipe), prefer Minis ProductCard with useProduct. */}
+              <section className="p-4 space-y-6 pb-28">
+                {baseProducts.map(p => {
+                  const { inCart, index } = isInCart(p.id)
+                  const priceText = formatPrice(p.priceAmount, p.priceCurrencyCode)
+                  const tagline = sanitizeTagline(copy.productTaglines[p.id])
+                  return (
+                    <article key={p.id} className="mx-auto w-full max-w-2xl bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm transition hover:shadow-md">
+                      {!isOverlay ? (
+                        <EmbeddedProduct productId={p.id} fallback={
+                          <div className="w-full bg-gray-100">
+                            {p.imageUrl ? (
+                              <img src={p.imageUrl} alt={p.title || 'Product'} className="w-full h-[280px] sm:h-[360px] object-cover" />
+                            ) : (
+                              <div className="w-full h-[280px] sm:h-[360px] bg-gray-100" />)
+                            }
+                          </div>
+                        } />
+                      ) : (
+                        <div className="w-full bg-gray-100">
+                          {p.imageUrl ? (
+                            <img src={p.imageUrl} alt={p.title || 'Product'} className="w-full h-[280px] sm:h-[360px] object-cover" />
+                          ) : (
+                            <div className="w-full h-[280px] sm:h-[360px] bg-gray-100" />)
+                          }
+                        </div>
+                      )}
+                      <div className="p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="text-base font-semibold text-gray-900 truncate">{p.title || 'Product'}</div>
+                            {priceText ? (
+                              <div className="text-sm text-gray-600">{priceText}</div>
+                            ) : null}
+                          </div>
+                          {inCart ? (
+                            <button className="text-xs px-3 py-1.5 rounded-full border border-gray-300 text-gray-700 bg-white hover:bg-gray-50" onClick={() => onRemoveItem(index)}>Remove</button>
+                          ) : (
+                            <button className="text-xs px-3 py-1.5 rounded-full bg-[#5A31F4] text-white shadow-sm hover:bg-[#4E28D6]" onClick={() => onAddItem({ product: p, quantity: 1 })}>Add</button>
+                          )}
+                        </div>
+                        {tagline ? (
+                          <div className="mt-3 text-[13px] text-gray-800 leading-6 line-clamp-3">{tagline}</div>
+                        ) : null}
+                      </div>
+                    </article>
+                  )
+                })}
+              </section>
+            </div>
+
+            {null}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+
+function EmbeddedProduct({ productId, fallback }: { productId: string; fallback?: JSX.Element }) {
+  const { product, loading } = useProduct({ id: productId } as any)
+  if (loading && fallback) return fallback
+  if (!product) return fallback ?? null
+  const imgUrl = (product as any)?.featuredImage?.url as string | undefined
+  return (
+    <div className="w-full bg-gray-100">
+      {imgUrl ? (
+        <img src={imgUrl} alt={(product as any)?.title || 'Product'} className="w-full h-[280px] sm:h-[360px] object-cover" />
+      ) : (
+        <div className="w-full h-[280px] sm:h-[360px] bg-gray-100" />
+      )}
+    </div>
+  )
+}
+
+
