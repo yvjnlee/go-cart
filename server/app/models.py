@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
 
@@ -101,3 +101,24 @@ class RequestTagResponse(BaseModel):
     request_id: str
     created_at: datetime
     updated_at: datetime
+
+
+# Browse models for rich product/store data
+class BrowseProduct(BaseModel):
+    id: str
+    title: str
+    imageUrl: Optional[str] = None
+    priceAmount: Optional[float] = None
+    priceCurrencyCode: Optional[str] = "USD"
+    shopify_product_id: Optional[str] = None
+    shopify_variant_id: Optional[str] = None
+
+
+class BrowseStore(BaseModel):
+    name: str
+    imageUrl: Optional[str] = None
+
+
+class BrowseResponse(BaseModel):
+    products: List[BrowseProduct]
+    stores: List[BrowseStore]

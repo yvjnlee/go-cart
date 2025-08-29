@@ -212,7 +212,7 @@ export default function ReelCard({ request, isActive, onShop }: Props) {
           }
         }}
       >
-        Shop
+        Shop for them
       </button>
 
       <div

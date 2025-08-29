@@ -37,20 +37,45 @@ export default function RequestDetailOverlay({ request, onClose }: { request: Sh
 
   return (
     <div className="fixed inset-0 z-50">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="absolute inset-0 md:inset-x-8 md:inset-y-8 bg-white rounded-none md:rounded-2xl overflow-hidden flex flex-col">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl border-t border-gray-200 max-h-[92vh] overflow-hidden md:absolute md:inset-x-8 md:inset-y-8 md:rounded-2xl md:border-none">
         {!showPostFirst && (
-          <button className="absolute top-3 right-3 z-10 h-9 w-9 rounded-full bg-black/60 text-white flex items-center justify-center border border-white/20" onClick={onClose}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.3 5.71L12 12.01 5.7 5.7 4.29 7.11l6.3 6.3-6.3 6.3 1.41 1.41 6.3-6.3 6.29 6.29 1.41-1.41-6.29-6.29 6.3-6.3z"/></svg>
-          </button>
-        )}
-        {!showPostFirst && (
-          <div className="p-2 pt-3">
-            <div className="inline-flex rounded-full border p-1 text-sm bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60">
-              <button className={`px-3 py-1 rounded-full ${tab==='crowdcarts'?'bg-gray-900 text-white':'text-gray-700'}`} onClick={() => setTab('crowdcarts')}>Crowdcarts</button>
-              <button className={`px-3 py-1 rounded-full ${tab==='added'?'bg-gray-900 text-white':'text-gray-700'}`} onClick={() => setTab('added')}>Added items</button>
+          <>
+            {/* Header with navigation tabs */}
+            <div className="p-4 border-b sticky top-0 bg-white z-10">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h4 className="text-base font-semibold">"{request.title}"</h4>
+                  <p className="text-xs text-gray-500">Budget ${request.budget}{request.occasion ? ` · ${request.occasion}` : ''}</p>
+                </div>
+                <button onClick={onClose} className="text-sm text-gray-600 hover:text-gray-800">Close</button>
+              </div>
+              
+              {/* Navigation tabs */}
+              <div className="flex bg-gray-100 rounded-lg p-1">
+                <button
+                  onClick={() => setTab('crowdcarts')}
+                  className={`flex-1 py-2 px-4 text-sm font-medium rounded-md transition-colors ${
+                    tab === 'crowdcarts' 
+                      ? 'bg-white text-gray-900 shadow-sm' 
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Crowdcarts
+                </button>
+                <button
+                  onClick={() => setTab('added')}
+                  className={`flex-1 py-2 px-4 text-sm font-medium rounded-md transition-colors ${
+                    tab === 'added' 
+                      ? 'bg-white text-gray-900 shadow-sm' 
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  Added Items ({userItems.length})
+                </button>
+              </div>
             </div>
-          </div>
+          </>
         )}
         <div className="flex-1 overflow-hidden relative">
           {tab === 'crowdcarts' ? (
@@ -436,16 +461,34 @@ function RequestPostPreview({ request, onContinue, onClose }: { request: Shoppin
 
 function AddedItemsPanel({ items, onRemoveItem, onAddAll }: { items: CartItem[]; onRemoveItem: (idx: number) => void; onAddAll: () => void }) {
   return (
-    <div className="h-full flex flex-col">
-      <div className="p-3 font-medium">Added items</div>
-      <div className="flex-1 overflow-y-auto px-3 pb-20">
-        <CartItemList items={items} onRemove={onRemoveItem} />
-      </div>
-      <div className="absolute inset-x-0 bottom-0 p-3 border-t bg-white">
-        <div className="flex items-center justify-between mx-3">
-          <div className="text-sm text-gray-600">Items: <span className="font-medium text-gray-900">{items.length}</span></div>
-          <button className="px-4 py-2 rounded-md text-sm font-medium bg-blue-600 text-white" onClick={onAddAll}>Add all to cart</button>
-        </div>
+    <div className="h-full overflow-y-auto">
+      <div className="p-4">
+        {items.length === 0 ? (
+          <div className="py-12 flex flex-col items-center justify-center text-gray-500">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+              <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M7 4V2C7 1.45 7.45 1 8 1H16C16.55 1 17 1.45 17 2V4H20C20.55 4 21 4.45 21 5S20.55 6 20 6H19V19C19 20.1 18.1 21 17 21H7C5.9 21 5 20.1 5 19V6H4C3.45 6 3 5.55 3 5S3.45 4 4 4H7ZM9 3V4H15V3H9ZM7 6V19H17V6H7Z"/>
+              </svg>
+            </div>
+            <p className="text-sm font-medium">No items added yet</p>
+            <p className="text-xs text-gray-400 mt-1">Items you add from crowdcarts will appear here</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="text-sm text-gray-600">
+              {items.length} item{items.length !== 1 ? 's' : ''} added
+            </div>
+            <CartItemList items={items} onRemove={onRemoveItem} />
+            <div className="pt-4 border-t">
+              <button 
+                className="w-full px-4 py-2 rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                onClick={onAddAll}
+              >
+                Add all to cart
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
