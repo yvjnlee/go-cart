@@ -1,5 +1,5 @@
 import type { CartItemProductSnapshot, ShoppingRequest } from '../types'
-import { fal } from '@fal-ai/serverless-client'
+import { fal } from '@fal-ai/client'
 
 // Configure FAL if credentials exist; otherwise calls will fall back to local synthesis
 const FAL_KEY = (import.meta as any).env?.VITE_FAL_KEY as string | undefined
